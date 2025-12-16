@@ -46,8 +46,9 @@ You must check &quot;{1}&quot; in plugin settings</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsRetroAchievementsBadConfig">RetroAchievements has not been correctly configured in settings</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsRetroAchievementsNoConsoleId" xml:space="preserve">No ConsoleId find for {0} with platforms {1}.
 Associate the platform in the plugin settings</sys:String>
-    <sys:String x:Key="LOCSuccessStoryNotificationsRpcs3BadConfig">RPCS3 has not been correctly configured in settings</sys:String>
-    <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetDisabled">Battle.net is enabled in SuccessStory but the library extension has been disabled in Playnite</sys:String>
+	<sys:String x:Key="LOCSuccessStoryNotificationsRpcs3BadConfig">RPCS3 has not been correctly configured in settings</sys:String>
+	<sys:String x:Key="LOCSuccessStoryNotificationsShadPS4BadConfig">ShadPS4 has not been correctly configured in settings</sys:String>
+	<sys:String x:Key="LOCSuccessStoryNotificationsBattleNetDisabled">Battle.net is enabled in SuccessStory but the library extension has been disabled in Playnite</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetNoAuthenticate">Battle.net user is not authenticated</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetNoAuthenticateOverwatch">Battle.net Overwatch user is not authenticated</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetNoAuthenticateSc2">Battle.net StarCraft II user is not authenticated</sys:String>
@@ -84,8 +85,9 @@ Associate the platform in the plugin settings</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableEa">Enable EA achievements</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableXbox">Enable Xbox achievements</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableRetroAchievements">Enable RetroAchievements achievements</sys:String>
-    <sys:String x:Key="LOCSuccessStoryEnableRpcs3Achievements">Enable RPCS3 achievements</sys:String>
-    <sys:String x:Key="LOCSuccessStoryEnableManualAchievements">Enable manual achievements</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableRpcs3Achievements">Enable RPCS3 achievements</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Achievements">Enable ShadPS4 achievements</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableManualAchievements">Enable manual achievements</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableOverwatchAchievements">Enable Overwatch achievements</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableSc2Achievements">Enable StarCraft II achievements</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableWowAchievements">Enable World of Warcraft achievements</sys:String>
@@ -93,9 +95,10 @@ Associate the platform in the plugin settings</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableGameJoltAchievements">Enable Game Jolt achievements</sys:String>
 
     <sys:String x:Key="LOCSuccessStorySteamNoApi">Disable API usage (Use when you don't have an API key)</sys:String>
-    <sys:String x:Key="LOCSuccessStoryEnableRpcs3HomeFolder">Home user folder</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableRpcs3HomeFolder">Home user folder</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Folder">ShadPS4 user folder</sys:String>
 
-    <sys:String x:Key="LOCSuccessStoryEnableRetroAchievementsView">Show separate view for RetroAchievements</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableRetroAchievementsView">Show separate view for RetroAchievements</sys:String>
 
     <sys:String x:Key="LOCSuccessStoryDatabase">Database</sys:String>
     <sys:String x:Key="LOCSuccessStoryGetData">Download achievements data</sys:String>
