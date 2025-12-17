@@ -47,7 +47,7 @@ Você deve verificar &quot;{1}&quot; nas configurações do plugin</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsRetroAchievementsNoConsoleId" xml:space="preserve">Não foi encontrado um ConsoleId para {0} com as plataformas {1}.
 Associe a plataforma nas configurações do plugin</sys:String>
 	<sys:String x:Key="LOCSuccessStoryNotificationsRpcs3BadConfig">O RPCS3 não foi ajustado corretamente nas configurações</sys:String>
-	<sys:String x:Key="LOCSuccessStoryNotificationsShadPS4BadConfig">ShadPS4 has not been correctly configured in settings</sys:String>
+	<sys:String x:Key="LOCSuccessStoryNotificationsShadPS4BadConfig">ShadPS4 não foi ajustada corretamente nas configurações</sys:String>
 	<sys:String x:Key="LOCSuccessStoryNotificationsBattleNetDisabled">A Battle.net está habilitada no SuccessStory, mas a extensão da biblioteca foi desativada no Playnite</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetNoAuthenticate">O usuário da Battle.net não está autenticado</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsBattleNetNoAuthenticateOverwatch">O usuário do Overwatch pelo Battle.net não está autenticado</sys:String>
@@ -86,7 +86,7 @@ Associe a plataforma nas configurações do plugin</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableXbox">Habilitar conquistas Xbox</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableRetroAchievements">Habilitar conquistas RetroAchievements</sys:String>
 	<sys:String x:Key="LOCSuccessStoryEnableRpcs3Achievements">Habilitar conquistas RPCS3</sys:String>
-	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Achievements">Enable ShadPS4 achievements</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Achievements">Habilitar conquistas ShadPS4</sys:String>
 	<sys:String x:Key="LOCSuccessStoryEnableManualAchievements">Habilitar conquistas manuais</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableOverwatchAchievements">Habilitar conquistas do Overwatch</sys:String>
     <sys:String x:Key="LOCSuccessStoryEnableSc2Achievements">Habilitar conquistas do StarCraft II</sys:String>
@@ -96,7 +96,7 @@ Associe a plataforma nas configurações do plugin</sys:String>
 
     <sys:String x:Key="LOCSuccessStorySteamNoApi">Desabilitar o uso da API (Use quando você não tem uma chave de API)</sys:String>
 	<sys:String x:Key="LOCSuccessStoryEnableRpcs3HomeFolder">Pasta principal do usuário</sys:String>
-	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Folder">ShadPS4 user folder</sys:String>
+	<sys:String x:Key="LOCSuccessStoryEnableShadPS4Folder">Pasta de usuário ShadPS4</sys:String>
 
 	<sys:String x:Key="LOCSuccessStoryEnableRetroAchievementsView">Exibir uma visualização separada para conquistas do RetroAchievements</sys:String>
 
