@@ -39,7 +39,7 @@ Eklenti ayarlarında &quot;{1}&quot; seçeneği işaretlenmeli</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsGogBadConfig">GOG ayarlarda düzgün yapılandırılmamı</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsPsnDisabled">BaşarıÖyküsü eklentisinde PSN etkinleştirilmiş ancak Playnite'da kütüphane eklentisi devre dışı bırakılmış</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsPsnNoAuthenticate">PSN kullanıcı kimliği doğrulanmadı</sys:String>
-    <sys:String x:Key="LOCSuccessStoryNotificationsEaDisabled">BaşarıÖyküsü eklentisinde EA etkinleştirilmiş ancak Playnite'da kütüphane eklentisi devre dışı bırakılmış</sys:String>
+    <sys:String x:Key="LOCSuccessStoryNotificationsEaDisabled">BaşarıÖyküsü eklentisinde EA etkinleştirilmiş ancak Playnite'da kütüphane eklentisi devre dışı bırakılmı</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsEaNoAuthenticate">EA kullanıcı kimliği doğrulanmadı</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsXboxDisabled">BaşarıÖyküsü eklentisinde Xbox etkinleştirilmiş ancak Playnite'da kütüphane eklentisi devre dışı bırakılmış</sys:String>
     <sys:String x:Key="LOCSuccessStoryNotificationsXboxNotAuthenticate">Xbox kullanıcı kimliği doğrulanmadı</sys:String>
