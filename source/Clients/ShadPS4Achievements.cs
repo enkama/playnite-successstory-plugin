@@ -21,14 +21,13 @@ namespace SuccessStory.Clients
     
     public class ShadPS4Achievements : GenericAchievements
     {
-        private readonly ExophaseAchievements _exophase;
         // PS4's RTC epoch is January 1, 2008 00:00:00 UTC
         private static readonly DateTime PS4Epoch = new DateTime(2008, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         private const int YearOffset = 2007; // The consistent difference we need to subtract
 
         public ShadPS4Achievements() : base("ShadPS4")
         {
-            _exophase = new ExophaseAchievements();
+
         }
 
         private DateTime? ConvertPS4Timestamp(string timestamp)
@@ -152,13 +151,13 @@ namespace SuccessStory.Clients
                         if (shouldFetchFromExophase)
                         {
                             Logger.Info($"Fetching trophy rarities from Exophase for {game.Name}");
-                            List<SearchResult> searchResults = _exophase.SearchGame(game.Name);
+                            List<SearchResult> searchResults = SuccessStory.ExophaseAchievements.SearchGame(game.Name);
                             SearchResult matchingGame = searchResults?.FirstOrDefault(x =>
                                 x.Platforms.Any(p => p.Contains("PS4", StringComparison.OrdinalIgnoreCase)));
 
                             if (matchingGame != null)
                             {
-                                exophaseAchievements = _exophase.GetAchievements(game, matchingGame);
+                                exophaseAchievements = SuccessStory.ExophaseAchievements.GetAchievements(game, matchingGame);
 
                                 // Create new cache
                                 rarityCache = new RarityCache
