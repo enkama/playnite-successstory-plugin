@@ -37,7 +37,16 @@ namespace SuccessStory.Clients
                 if (string.IsNullOrEmpty(timestamp))
                     return null;
 
-                // Parse the PS4 timestamp
+                // Handle newer 10-digit Unix timestamps (seconds since 1970)
+                if (timestamp.Length <= 12)
+                {
+                    if (long.TryParse(timestamp, out long seconds))
+                    {
+                        return new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(seconds).ToLocalTime();
+                    }
+                }
+
+                // Parse the PS4 timestamp (Legacy 17-digit format)
                 ulong tickValue = ulong.Parse(timestamp);
 
                 // Divide by 1000 to get milliseconds instead of microseconds
