@@ -76,6 +76,7 @@ namespace SuccessStory.Clients
         {
             _logger.Info($"Xbox360: Getting achievements for game: {game.Name}");
             GameAchievements gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
+            bool saved = false;
 
             if (!EnabledInSettings())
             {
@@ -99,7 +100,7 @@ namespace SuccessStory.Clients
                             string tempJsonFile = Path.Combine(_xeniaJsonTempDir, $"{gameId}.json");
                             string achievementTextFile = Path.Combine(_xeniaAchievementsDir, $"{gameId}.txt");
 
-                            ProcessAchievementsImproved(gameId, successStoryJsonFile, tempJsonFile, achievementTextFile, game);
+                            saved = ProcessAchievementsImproved(gameId, successStoryJsonFile, tempJsonFile, achievementTextFile, game);
 
                             var oldData = SuccessStory.PluginDatabase.Get(game.Id, true);
                             gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
@@ -128,12 +129,15 @@ namespace SuccessStory.Clients
                 ShowNotificationPluginNoConfiguration();
             }
 
-            gameAchievements.SetRaretyIndicator();
-            PluginDatabase.AddOrUpdate(gameAchievements);
+            if (!saved)
+            {
+                gameAchievements.SetRaretyIndicator();
+                PluginDatabase.AddOrUpdate(gameAchievements);
+            }
             return gameAchievements;
         }
 
-        private List<Achievement> ProcessAchievementsImproved(string gameId, string successStoryJsonFile, string tempJsonFile, string achievementTextFile, Game game)
+        private bool ProcessAchievementsImproved(string gameId, string successStoryJsonFile, string tempJsonFile, string achievementTextFile, Game game)
         {
             var achievements = new List<Achievement>();
 
@@ -149,14 +153,14 @@ namespace SuccessStory.Clients
                 SaveAchievementsAtomically(achievements, successStoryJsonFile, game);
 
                 _logger.Info($"Xbox360: Processed {unlockedAchievements.Count} unlocked achievements");
+                return true;
             }
             catch (Exception ex)
             {
                 _logger.Error($"Xbox360: Failed to process achievements: {ex.Message}");
                 Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                return false;
             }
-
-            return achievements;
         }
 
         private Dictionary<string, DateTime> GetUnlockedAchievements(string achievementTextFile)
@@ -307,6 +311,7 @@ namespace SuccessStory.Clients
                     }
                     File.Copy(tempPath, finalPath);
                     gameAchievements.IsManual = true;
+                    gameAchievements.SetRaretyIndicator();
                     SuccessStory.PluginDatabase.AddOrUpdate(gameAchievements);
                     SuccessStory.PluginDatabase.SetThemesResources(game);
                 }

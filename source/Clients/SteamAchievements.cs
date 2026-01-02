@@ -276,7 +276,6 @@ namespace SuccessStory.Clients
 
             SetRarity(appId, gameAchievements);
             gameAchievements.SetRaretyIndicator();
-            PluginDatabase.AddOrUpdate(gameAchievements);
             return gameAchievements;
         }
 
