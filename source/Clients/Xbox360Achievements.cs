@@ -127,6 +127,7 @@ namespace SuccessStory.Clients
             else if (!IsConfigured())
             {
                 ShowNotificationPluginNoConfiguration();
+                return gameAchievements;
             }
 
             if (!saved)
