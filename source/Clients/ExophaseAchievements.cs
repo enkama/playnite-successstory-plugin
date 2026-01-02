@@ -80,25 +80,15 @@ namespace SuccessStory.Clients
                 string dataExophaseLocalised = string.Empty;
                 string dataExophase = string.Empty;
 
-                WebViewSettings webViewSettings = new WebViewSettings
-                {
-                    UserAgent = Web.UserAgent
-                };
+                var data = Web.DownloadSourceDataWebView(searchResult.Url, null, false, CookiesDomains).GetAwaiter().GetResult();
+                dataExophase = data.Item1;
 
-                using (IWebView webView = API.Instance.WebViews.CreateOffscreenView(webViewSettings))
+                if (!Regex.IsMatch(dataExophase, @"<title>.*?\bAchievements\b.*?</title>"))
                 {
-                    webView.DeleteDomainCookies(CookiesDomains.First());
-                    webView.NavigateAndWait(searchResult.Url);
-                    dataExophase = webView.GetPageSource();
-
-                    if (!Regex.IsMatch(dataExophase, @"<title>.*?\bAchievements\b.*?</title>"))
-                    {
-                        Logger.Warn("Exophase no english data or notice message app"); 
-                        webView.DeleteDomainCookies(CookiesDomains.First());
-                        Thread.Sleep(2000);
-                        webView.NavigateAndWait(searchResult.Url);
-                        dataExophase = webView.GetPageSource();
-                    }
+                    Logger.Warn("Exophase no english data or notice message app");
+                    Thread.Sleep(2000);
+                    data = Web.DownloadSourceDataWebView(searchResult.Url, null, false, CookiesDomains).GetAwaiter().GetResult();
+                    dataExophase = data.Item1;
                 }
 
                 if (PluginDatabase.PluginSettings.Settings.UseLocalised && !IsConnected())
@@ -114,15 +104,15 @@ namespace SuccessStory.Clients
                 }
                 else if (PluginDatabase.PluginSettings.Settings.UseLocalised)
                 {
-                    var data = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
-                    dataExophaseLocalised = data.Item1;
+                    var dataLoc = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
+                    dataExophaseLocalised = dataLoc.Item1;
                     
                     if (dataExophaseLocalised.Contains("Notice Message App"))
                     {
                         Logger.Warn("Exophase notice message app");
                         Thread.Sleep(2000);
-                        data = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
-                        dataExophaseLocalised = data.Item1;
+                        dataLoc = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
+                        dataExophaseLocalised = dataLoc.Item1;
                     }
                 }
 
@@ -223,8 +213,18 @@ namespace SuccessStory.Clients
                 _ = webView.OpenDialog();
             }
 
+            // Wait for cookies to be flushed to disk
+            Thread.Sleep(2000);
             List<HttpCookie> httpCookies = CookiesTools.GetWebCookies(true);
-            SetCookies(httpCookies);
+            
+            if (httpCookies.Count > 0)
+            {
+                SetCookies(httpCookies);
+            }
+            else
+            {
+                Logger.Warn("Exophase Login: No cookies found after login.");
+            }
         }
 
         private bool GetIsUserLoggedIn()

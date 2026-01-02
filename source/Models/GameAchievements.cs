@@ -167,7 +167,7 @@ namespace SuccessStory.Models
                             break;
                     }
 
-                    OrderAchievement = null;
+
 
                     return OrderedItems.ToObservable();
                 }
