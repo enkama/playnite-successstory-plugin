@@ -536,24 +536,7 @@ namespace SuccessStory.Views
 					if (Directory.Exists(selectedFolder))
 					{
 						// Look for ShadPS4's specific path structure
-                        string userGameDataPath = Path.Combine(selectedFolder, "user", "game_data");
-                        string launcherGameDataPath = Path.Combine(selectedFolder, "launcher", "game_data");
-                        string shadPS4GameDataPath = Path.Combine(selectedFolder, "shadPS4", "game_data");
-
-                        string validGameDataPath = null;
-
-                        if (Directory.Exists(userGameDataPath))
-                        {
-                            validGameDataPath = userGameDataPath;
-                        }
-                        else if (Directory.Exists(launcherGameDataPath))
-                        {
-                            validGameDataPath = launcherGameDataPath;
-                        }
-                        else if (Directory.Exists(shadPS4GameDataPath))
-                        {
-                            validGameDataPath = shadPS4GameDataPath;
-                        }
+                        string validGameDataPath = ShadPS4Achievements.GetGameDataPath(selectedFolder);
 
 						if (string.IsNullOrEmpty(validGameDataPath))
 						{

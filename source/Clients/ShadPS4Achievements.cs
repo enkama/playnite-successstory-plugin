@@ -115,7 +115,7 @@ namespace SuccessStory.Clients
             }
         }
 
-        private string GetGameDataPath(string installationFolder)
+        public static string GetGameDataPath(string installationFolder)
         {
             if (string.IsNullOrEmpty(installationFolder))
             {
