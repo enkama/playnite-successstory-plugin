@@ -115,6 +115,37 @@ namespace SuccessStory.Clients
             }
         }
 
+        private string GetGameDataPath(string installationFolder)
+        {
+            if (string.IsNullOrEmpty(installationFolder))
+            {
+                return null;
+            }
+
+            // Check for user/game_data (Legacy)
+            string userGameData = Path.Combine(installationFolder, "user", "game_data");
+            if (Directory.Exists(userGameData))
+            {
+                return userGameData;
+            }
+
+            // Check for launcher/game_data (Portable New)
+            string launcherGameData = Path.Combine(installationFolder, "launcher", "game_data");
+            if (Directory.Exists(launcherGameData))
+            {
+                return launcherGameData;
+            }
+
+            // Check for shadPS4/game_data (Default/AppData structure)
+            string shadPS4GameData = Path.Combine(installationFolder, "shadPS4", "game_data");
+            if (Directory.Exists(shadPS4GameData))
+            {
+                return shadPS4GameData;
+            }
+
+            return null;
+        }
+
         public override GameAchievements GetAchievements(Game game)
         {
             GameAchievements gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
@@ -122,10 +153,10 @@ namespace SuccessStory.Clients
 
             if (IsConfigured())
             {
-                string userGameDataPath = Path.Combine(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder, "user", "game_data");
+                string userGameDataPath = GetGameDataPath(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder);
                 string titleId = FindGameTitleId(game);
 
-                if (!string.IsNullOrEmpty(titleId))
+                if (!string.IsNullOrEmpty(titleId) && !string.IsNullOrEmpty(userGameDataPath))
                 {
                     string trophyPath = Path.Combine(userGameDataPath, titleId, "trophyfiles");
                     string xmlPath = Path.Combine(trophyPath, "trophy00", "Xml", "TROP.XML");
@@ -300,11 +331,10 @@ namespace SuccessStory.Clients
                 return false;
             }
 
-            string userGameDataPath = Path.Combine(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder, "user", "game_data");
-            userGameDataPath = Paths.FixPathLength(userGameDataPath);
-            if (!Directory.Exists(userGameDataPath))
+            string userGameDataPath = GetGameDataPath(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder);
+            if (string.IsNullOrEmpty(userGameDataPath))
             {
-                Logger.Warn($"No ShadPS4 user/game_data folder in {PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder}");
+                Logger.Warn($"No ShadPS4 game_data folder found in {PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder}");
                 return false;
             }
 
@@ -320,7 +350,11 @@ namespace SuccessStory.Clients
         #region ShadPS4        
         private string FindGameTitleId(Game game)
         {
-            string userGameDataPath = Path.Combine(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder, "user", "game_data");
+            string userGameDataPath = GetGameDataPath(PluginDatabase.PluginSettings.Settings.ShadPS4InstallationFolder);
+            if (string.IsNullOrEmpty(userGameDataPath))
+            {
+                return null;
+            }
 
             // Get all title ID folders
             DirectoryInfo[] titleDirectories = new DirectoryInfo(userGameDataPath).GetDirectories();
