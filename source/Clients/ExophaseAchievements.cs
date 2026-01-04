@@ -80,14 +80,14 @@ namespace SuccessStory.Clients
                 string dataExophaseLocalised = string.Empty;
                 string dataExophase = string.Empty;
 
-                var data = Web.DownloadSourceDataWebView(searchResult.Url, null, false, CookiesDomains).GetAwaiter().GetResult();
+                var data = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
                 dataExophase = data.Item1;
 
                 if (!Regex.IsMatch(dataExophase, @"<title>.*?\bAchievements\b.*?</title>"))
                 {
                     Logger.Warn("Exophase no english data or notice message app");
                     Thread.Sleep(2000);
-                    data = Web.DownloadSourceDataWebView(searchResult.Url, null, false, CookiesDomains).GetAwaiter().GetResult();
+                    data = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
                     dataExophase = data.Item1;
                 }
 
@@ -250,7 +250,7 @@ namespace SuccessStory.Clients
 					? string.Format(UrlExophaseSearch, WebUtility.UrlEncode(name))
 					: string.Format(UrlExophaseSearchPlatform, WebUtility.UrlEncode(name), platforms);
 
-                var dataText = Web.DownloadJsonDataWebView(urlSearch).GetAwaiter().GetResult();
+                var dataText = Web.DownloadJsonDataWebView(urlSearch, GetCookies()).GetAwaiter().GetResult();
 				string json = dataText.Item1;
 
                 if (!Serialization.TryFromJson(json, out ExophaseSearchResult exophaseScheachResult))

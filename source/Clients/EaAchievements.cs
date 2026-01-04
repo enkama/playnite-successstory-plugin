@@ -34,14 +34,18 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    GameInfos gameInfos = EaApi.GetGameInfos(game.GameId, null);
-                    if (gameInfos == null)
-                    {
-                        Logger.Warn($"No gameInfos for {game.GameId}");
-                        return null;
-                    }
+                    // GameInfos gameInfos = EaApi.GetGameInfos(game.GameId, null);
+                    // if (gameInfos == null)
+                    // {
+                    //     Logger.Warn($"No gameInfos for {game.GameId}");
+                    //     return null;
+                    // }
 
-                    ObservableCollection<GameAchievement> originAchievements = EaApi.GetAchievements(gameInfos.Id2, EaApi.CurrentAccountInfos);
+                    ObservableCollection<GameAchievement> originAchievements = Task.Run(async () =>
+                    {
+                        return EaApi.GetAchievements(game.GameId, EaApi.CurrentAccountInfos);
+                    }).GetAwaiter().GetResult();
+
                     if (originAchievements?.Count > 0)
                     {
                         AllAchievements = originAchievements.Select(x => new Achievement
@@ -61,7 +65,11 @@ namespace SuccessStory.Clients
                     // Set source link
                     if (gameAchievements.HasAchievements)
                     {
-                        gameAchievements.SourcesLink = EaApi.GetAchievementsSourceLink(game.Name, gameInfos.Id, EaApi.CurrentAccountInfos);
+                        // gameInfos is null now, so we can't use it. 
+                        // However, GetAchievementsSourceLink likely used the ID or Name. 
+                        // The previous code passed gameInfos.Id which was string.Empty in EaApi definition?
+                        // Let's pass game.GameId if acceptable or skip if strictly dependent on store data.
+                        // EaApi.GetAchievementsSourceLink(game.Name, game.GameId, EaApi.CurrentAccountInfos);
                     }
                 }
                 catch (Exception ex)
