@@ -233,7 +233,7 @@ namespace SuccessStory.Controls
             }
 
             GameAchievements gameAchievements = (GameAchievements)pluginGameData;
-            gameAchievements.OrderAchievement = PluginDatabase.PluginSettings.Settings.IntegrationListOrderAchievement;
+            // gameAchievements.OrderAchievement = PluginDatabase.PluginSettings.Settings.IntegrationListOrderAchievement;
 
             if (!gameAchievements.Items.FirstOrDefault().CategoryRpcs3.IsNullOrEmpty())
             {
@@ -250,7 +250,7 @@ namespace SuccessStory.Controls
             }
             else
             {
-                ControlDataContext.ItemsSource = gameAchievements.OrderItems;
+                ControlDataContext.ItemsSource = gameAchievements.GetOrderItems(PluginDatabase.PluginSettings.Settings.IntegrationListOrderAchievement);
             }
 
             UpdateHardcoreMode(ShowHardcore);
@@ -265,9 +265,11 @@ namespace SuccessStory.Controls
             }
 
             GameAchievements gameAchievements = PluginDatabase.Get(GameContext, true);
-            gameAchievements.OrderAchievement = OrderAchievement;
+            // gameAchievements.OrderAchievement = OrderAchievement;
 
-            ObservableCollection<Achievement> achievements = gameAchievements.OrderItems.Where(x => x.Category.IsEqual(categoryName)).ToObservable();
+            ObservableCollection<Achievement> achievements = gameAchievements.GetOrderItems(OrderAchievement)
+                .Where(x => x.Category.IsEqual(categoryName))
+                .ToObservable();
             ControlDataContext.ItemsSource = achievements;
         }
 
@@ -459,9 +461,8 @@ namespace SuccessStory.Controls
             if (GameContext != null)
             {
                 GameAchievements gameAchievements = PluginDatabase.Get(GameContext, true);
-                gameAchievements.OrderAchievement = OrderAchievement;
 
-                ObservableCollection<Achievement> achievements = gameAchievements.OrderItems;
+                ObservableCollection<Achievement> achievements = gameAchievements.GetOrderItems(OrderAchievement);
                 if (!CategoryName.IsNullOrEmpty())
                 {
                     achievements = achievements.Where(x => x.Category.IsEqual(CategoryName)).ToObservable();

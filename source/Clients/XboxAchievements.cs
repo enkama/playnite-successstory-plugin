@@ -49,7 +49,8 @@ namespace SuccessStory.Clients
                         return gameAchievements;
                     }
 
-                    AllAchievements = GetXboxAchievements(game, authData).GetAwaiter().GetResult();
+                    // Run in background to avoid blocking UI thread and potential deadlocks
+                    AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData)).GetAwaiter().GetResult();
                 }
                 catch (Exception ex)
                 {
@@ -121,11 +122,11 @@ namespace SuccessStory.Clients
         {
             if (CachedIsConnectedResult == null)
             {
-                CachedIsConnectedResult = XboxAccountClient.GetIsUserLoggedIn().GetAwaiter().GetResult();
+                CachedIsConnectedResult = Task.Run(async () => await XboxAccountClient.GetIsUserLoggedIn()).GetAwaiter().GetResult();
                 if (!(bool)CachedIsConnectedResult && File.Exists(XboxAccountClient.liveTokensPath))
                 {
-                    XboxAccountClient.RefreshTokens().GetAwaiter().GetResult();
-                    CachedIsConnectedResult = XboxAccountClient.GetIsUserLoggedIn().GetAwaiter().GetResult();
+                    Task.Run(async () => await XboxAccountClient.RefreshTokens()).GetAwaiter().GetResult();
+                    CachedIsConnectedResult = Task.Run(async () => await XboxAccountClient.GetIsUserLoggedIn()).GetAwaiter().GetResult();
                 }
             }
 
@@ -153,7 +154,7 @@ namespace SuccessStory.Clients
             }
             else if (!game.GameId.IsNullOrEmpty())
             {
-                TitleHistoryResponse.Title libTitle = XboxAccountClient.GetTitleInfo(game.GameId).Result;
+                TitleHistoryResponse.Title libTitle = Task.Run(async () => await XboxAccountClient.GetTitleInfo(game.GameId)).GetAwaiter().GetResult();
                 titleId = libTitle.titleId;
 
                 Common.LogDebug(true, $"{ClientName} - name: {game.Name} - gameId: {game.GameId} - titleId: {titleId}");
@@ -170,7 +171,7 @@ namespace SuccessStory.Clients
                 client.DefaultRequestHeaders.Add("User-Agent", Web.UserAgent);
                 SetAuthenticationHeaders(client.DefaultRequestHeaders, authData, contractVersion);
 
-                HttpResponseMessage response = client.GetAsync(url).Result;
+                HttpResponseMessage response = await client.GetAsync(url);
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
                     if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
