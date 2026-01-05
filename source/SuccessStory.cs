@@ -1197,6 +1197,8 @@ namespace SuccessStory
                 CancellationToken ct = TokenSource.Token;
                 Task TaskCacheImage = Task.Run(() =>
                 {
+                    Thread.Sleep(60000);
+
                     // Wait Playnite & extension database are loaded
                     _ = SpinWait.SpinUntil(() => API.Instance.Database.IsOpen, -1);
                     _ = SpinWait.SpinUntil(() => PluginDatabase.IsLoaded, -1);
@@ -1210,6 +1212,8 @@ namespace SuccessStory
 #endif
                     db.ForEach(x =>
                     {
+                        Thread.Sleep(50);
+
                         if (ct.IsCancellationRequested)
                         {
                             return;

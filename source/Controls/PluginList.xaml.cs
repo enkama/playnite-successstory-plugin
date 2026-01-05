@@ -1,4 +1,5 @@
 ﻿using CommonPluginsControls.Controls;
+using CommonPluginsShared;
 using CommonPluginsShared.Collections;
 using CommonPluginsShared.Controls;
 using CommonPluginsShared.Extensions;
@@ -303,7 +304,10 @@ namespace SuccessStory.Controls
                     }
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+            }
         }
 
         #endregion

@@ -59,7 +59,7 @@ namespace SuccessStory.Clients
         {
             if (string.IsNullOrEmpty(_xeniaPath))
             {
-                _logger.Error("Xbox360: Xenia path is null or empty");
+                _logger.Warn("Xbox360: Xenia path is null or empty");
                 return;
             }
 

@@ -185,7 +185,10 @@ namespace SuccessStory.Controls.Customs
                     //PART_ColorEffectUltraRare.Begin();
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+            }
         }
 
 
@@ -230,8 +233,9 @@ namespace SuccessStory.Controls.Customs
                     });
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
                 image = null;
             }
 

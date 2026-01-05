@@ -148,7 +148,10 @@ namespace SuccessStory.Clients
                         response = Web.DownloadStringData(url, PsnAPI.mobileToken.access_token).GetAwaiter().GetResult();
                         trophies = Serialization.FromJson<Trophies>(response);
                     }
-                    catch { }
+                    catch (Exception ex)
+                    {
+                        Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                    }
 
                     Trophies trophiesDetails = null;
                     try
