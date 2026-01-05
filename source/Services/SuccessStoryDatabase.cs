@@ -24,7 +24,7 @@ namespace SuccessStory.Services
     {
         public SuccessStory Plugin { get; set; }
 
-        private static object AchievementProvidersLock => new object();
+        private static readonly object AchievementProvidersLock = new object();
         private static Dictionary<AchievementSource, GenericAchievements> achievementProviders;
         internal static Dictionary<AchievementSource, GenericAchievements> AchievementProviders
         {
@@ -34,45 +34,29 @@ namespace SuccessStory.Services
                 {
                     if (achievementProviders == null)
                     {
-                        achievementProviders = new Dictionary<AchievementSource, GenericAchievements>();
-
-                        // Local method to secure the creation of each provider
-                        void TryAddProvider(AchievementSource source, Func<GenericAchievements> factory)
+                        achievementProviders = new Dictionary<AchievementSource, GenericAchievements>
                         {
-                            try
-                            {
-                                Common.LogDebug(true, $"[AchievementsFactory] Creating provider for: {source}");
-                                var provider = factory();
-                                achievementProviders[source] = provider;
-                                Common.LogDebug(true, $"[AchievementsFactory] Successfully created provider for: {source}");
-                            }
-                            catch (Exception ex)
-                            {
-                                Common.LogError(ex, false, $"[AchievementsFactory] Error creating provider for {source}", true, PluginDatabase.PluginName);
-                            }
-                        }
-
-                        // Secure addition of providers
-                        TryAddProvider(AchievementSource.GOG, () => new GogAchievements());
-                        TryAddProvider(AchievementSource.Epic, () => new EpicAchievements());
-                        TryAddProvider(AchievementSource.EA, () => new EaAchievements());
-                        TryAddProvider(AchievementSource.Overwatch, () => new OverwatchAchievements());
-                        TryAddProvider(AchievementSource.Wow, () => new WowAchievements());
-                        TryAddProvider(AchievementSource.Playstation, () => new PSNAchievements());
-                        TryAddProvider(AchievementSource.RetroAchievements, () => new RetroAchievements());
-                        TryAddProvider(AchievementSource.RPCS3, () => new Rpcs3Achievements());
-                        TryAddProvider(AchievementSource.ShadPS4, () => new ShadPS4Achievements());
-                        TryAddProvider(AchievementSource.Xbox360, () => new Xbox360Achievements());
-                        TryAddProvider(AchievementSource.Starcraft2, () => new Starcraft2Achievements());
-                        TryAddProvider(AchievementSource.Steam, () => new SteamAchievements());
-                        TryAddProvider(AchievementSource.Xbox, () => new XboxAchievements());
-                        TryAddProvider(AchievementSource.GenshinImpact, () => new GenshinImpactAchievements());
-                        TryAddProvider(AchievementSource.WutheringWaves, () => new WutheringWavesAchievements());
-                        TryAddProvider(AchievementSource.HonkaiStarRail, () => new HonkaiStarRailAchievements());
-                        TryAddProvider(AchievementSource.ZenlessZoneZero, () => new ZenlessZoneZeroAchievements());
-                        TryAddProvider(AchievementSource.GuildWars2, () => new GuildWars2Achievements());
-                        TryAddProvider(AchievementSource.GameJolt, () => new GameJoltAchievements());
-                        TryAddProvider(AchievementSource.Local, () => SteamAchievements.GetLocalSteamAchievementsProvider());
+                            { AchievementSource.GOG, new GogAchievements() },
+                            { AchievementSource.Epic, new EpicAchievements() },
+                            { AchievementSource.EA, new EaAchievements() },
+                            { AchievementSource.Overwatch, new OverwatchAchievements() },
+                            { AchievementSource.Wow, new WowAchievements() },
+                            { AchievementSource.Playstation, new PSNAchievements() },
+                            { AchievementSource.RetroAchievements, new RetroAchievements() },
+                            { AchievementSource.RPCS3, new Rpcs3Achievements() },
+                            { AchievementSource.ShadPS4, new ShadPS4Achievements() },
+                            { AchievementSource.Xbox360, new Xbox360Achievements() },
+                            { AchievementSource.Starcraft2, new Starcraft2Achievements() },
+                            { AchievementSource.Steam, new SteamAchievements() },
+                            { AchievementSource.Xbox, new XboxAchievements() },
+                            { AchievementSource.GenshinImpact, new GenshinImpactAchievements() },
+                            { AchievementSource.WutheringWaves, new WutheringWavesAchievements() },
+                            { AchievementSource.HonkaiStarRail, new HonkaiStarRailAchievements() },
+                            { AchievementSource.ZenlessZoneZero, new ZenlessZoneZeroAchievements() },
+                            { AchievementSource.GuildWars2, new GuildWars2Achievements() },
+                            { AchievementSource.GameJolt, new GameJoltAchievements() },
+                            { AchievementSource.Local, SteamAchievements.GetLocalSteamAchievementsProvider() }
+                        };
                     }
                 }
                 return achievementProviders;
@@ -81,7 +65,7 @@ namespace SuccessStory.Services
 
         public SuccessStoryDatabase(SuccessStorySettingsViewModel pluginSettings, string pluginUserDataPath) : base(pluginSettings, "SuccessStory", pluginUserDataPath)
         {
-            TagBefore = "[SS]";
+             TagBefore = "[SS]";
         }
 
 
@@ -406,46 +390,72 @@ namespace SuccessStory.Services
                     EstimateTimeToUnlock estimateTimeSteam = new EstimateTimeToUnlock();
                     EstimateTimeToUnlock estimateTimeXbox = new EstimateTimeToUnlock();
 
-                    List<TrueAchievementSearch> listGames = TrueAchievements.SearchGame(game, OriginData.Steam);
-                    if (listGames.Count > 0)
+                    bool completed = Task.Run(() =>
                     {
-                        var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
-                            .OrderByDescending(x => x.MatchPercent)
-                            .ToList();
+                        try
+                        {
+                            List<TrueAchievementSearch> listGames = TrueAchievements.SearchGame(game, OriginData.Steam);
+                            if (listGames.Count > 0)
+                            {
+                                var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
+                                    .OrderByDescending(x => x.MatchPercent)
+                                    .ToList();
 
-                        if (fuzzList.First().Data.GameUrl.IsNullOrEmpty())
-                        {
-                            Logger.Warn($"No TrueAchievements (Steam) url for {game.Name}");
-                        }
-                        else
-                        {
-                            estimateTimeSteam = TrueAchievements.GetEstimateTimeToUnlock(fuzzList.First().Data.GameUrl);
-                        }
-                    }
-                    else
-                    {
-                        Logger.Warn($"Game not found on TrueSteamAchivements (Steam) for {game.Name}");
-                    }
+                                if (fuzzList.First().Data.GameUrl.IsNullOrEmpty())
+                                {
+                                    // Only call estimator when a valid URL is available
+                                    var candidateUrl = fuzzList.FirstOrDefault()?.Data?.GameUrl;
+                                    if (!string.IsNullOrEmpty(candidateUrl))
+                                    {
+                                        estimateTimeSteam = TrueAchievements.GetEstimateTimeToUnlock(candidateUrl);
+                                    }
+                                    else
+                                    {
+                                        // No valid URL found for the top match; skip without noisy warning
+                                        Logger.Debug($"No TrueAchievements (Steam) URL for best match of {game.Name}");
+                                    }
+                                }
+                                else
+                                {
+                                    estimateTimeSteam = TrueAchievements.GetEstimateTimeToUnlock(fuzzList.First().Data.GameUrl);
+                                }
+                            }
+                            else
+                            {
+                                Logger.Warn($"Game not found on TrueSteamAchivements (Steam) for {game.Name}");
+                            }
 
-                    listGames = TrueAchievements.SearchGame(game, OriginData.Xbox);
-                    if (listGames.Count > 0)
-                    {
-                        var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
-                            .OrderByDescending(x => x.MatchPercent)
-                            .ToList();
+                            listGames = TrueAchievements.SearchGame(game, OriginData.Xbox);
+                            if (listGames.Count > 0)
+                            {
+                                var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
+                                    .OrderByDescending(x => x.MatchPercent)
+                                    .ToList();
 
-                        if (fuzzList.First().Data.GameUrl.IsNullOrEmpty())
-                        {
-                            Logger.Warn($"No TrueAchievements (Xbox) url for {game.Name}");
+                                if (fuzzList.First().Data.GameUrl.IsNullOrEmpty())
+                                {
+                                    Logger.Warn($"No TrueAchievements (Xbox) url for {game.Name}");
+                                }
+                                else
+                                {
+                                    estimateTimeXbox = TrueAchievements.GetEstimateTimeToUnlock(fuzzList.First().Data.GameUrl);
+                                }
+                            }
+                            else
+                            {
+                                Logger.Warn($"Game not found on TrueAchivements (Xbox) for {game.Name}");
+                            }
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            estimateTimeXbox = TrueAchievements.GetEstimateTimeToUnlock(fuzzList.First().Data.GameUrl);
+                            Logger.Error(ex, "Error in SetEstimateTimeToUnlock Task");
                         }
-                    }
-                    else
+                    }).Wait(5000);
+
+                    if (!completed)
                     {
-                        Logger.Warn($"Game not found on TrueAchivements (Xbox) for {game.Name}");
+                         Logger.Warn($"SetEstimateTimeToUnlock timed out for {game.Name}");
+                         return gameAchievements;
                     }
 
                     if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount)
@@ -659,7 +669,7 @@ namespace SuccessStory.Services
 			}
 
 			// Priority 2: Check if any game action is an emulator
-			bool hasEmulatorAction = game.GameActions.Any(action => action.Type == GameActionType.Emulator);
+			bool hasEmulatorAction = game.GameActions != null && game.GameActions.Any(action => action.Type == GameActionType.Emulator);
             if (settings.EnableRetroAchievements && hasEmulatorAction)
             {
                 return AchievementSource.RetroAchievements;
@@ -840,14 +850,15 @@ namespace SuccessStory.Services
             GameAchievements loadedItem = Get(id, true);
             GameAchievements webItem = null;
 
-            if (loadedItem?.IsIgnored ?? true)
+            if (loadedItem?.IsIgnored == true)
             {
+                Logger.Info($"RefreshNoLoader: {game?.Name} is ignored");
                 return;
             }
 
-            Logger.Info($"RefreshNoLoader({game?.Name} - {game?.Id})");
+            Logger.Info($"RefreshNoLoader({game?.Name} - {game?.Id}) - IsIgnored: {loadedItem?.IsIgnored}");
 
-            if (loadedItem.IsManual)
+            if (loadedItem?.IsManual == true)
             {
                 webItem = game.Name.IsEqual("Genshin Impact") ? RefreshGenshinImpact(game) : game.Name.IsEqual("Wuthering Waves") ? RefreshWutheringWaves(game) : game.Name.IsEqual("Honkai: Star Rail") ? RefreshHonkaiStarRail(game) : game.Name.IsEqual("Zenless Zone Zero") ? RefreshZenlessZoneZero(game) : RefreshManual(game);
 

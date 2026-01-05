@@ -11,6 +11,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.IO;
 
 namespace SuccessStory.Clients
 {
@@ -208,6 +209,160 @@ namespace SuccessStory.Clients
             }
 
             return estimateTimeToUnlock;
+        }
+
+        /// <summary>
+        /// Extract achievement image name -> url pairs from a TrueAchievements/TrueSteamAchievements game page.
+        /// </summary>
+        public static Dictionary<string, string> GetDataImages(string gameUrl)
+        {
+            var images = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (string.IsNullOrEmpty(gameUrl))
+            {
+                return images;
+            }
+
+            try
+            {
+                var sourceData = Web.DownloadSourceDataWebView(gameUrl).GetAwaiter().GetResult();
+                string response = sourceData.Item1;
+                if (response.IsNullOrEmpty())
+                {
+                    Logger.Warn($"GetDataImages: no data from {gameUrl}");
+                    return images;
+                }
+
+                HtmlParser parser = new HtmlParser();
+                IHtmlDocument doc = parser.Parse(response);
+
+                Uri baseUri = null;
+                try
+                {
+                    baseUri = new Uri(gameUrl);
+                }
+                catch (Exception exBaseUri)
+                {
+                    Logger.Debug($"GetDataImages: invalid base URI '{gameUrl}' - {exBaseUri.Message}");
+                    baseUri = null;
+                }
+
+                // Prefer selectors that commonly contain achievements and images
+                var candidateSelectors = new[]
+                {
+                    ".achievement",
+                    ".achievements",
+                    ".achievement-list",
+                    "#achievements",
+                    "img"
+                };
+
+                // Collect img elements
+                var imgElements = new List<IElement>();
+                foreach (var sel in candidateSelectors)
+                {
+                    try
+                    {
+                        var found = doc.QuerySelectorAll(sel)?.Where(e => e.TagName.Equals("IMG", StringComparison.OrdinalIgnoreCase) || e.QuerySelectorAll("img").Any());
+                        if (found != null)
+                        {
+                            foreach (var e in found)
+                            {
+                                if (e.TagName.Equals("IMG", StringComparison.OrdinalIgnoreCase)) imgElements.Add(e);
+                                else imgElements.AddRange(e.QuerySelectorAll("img"));
+                            }
+                        }
+                    }
+                    catch (Exception exSel)
+                    {
+                        Logger.Debug($"GetDataImages: selector '{sel}' caused an error: {exSel.Message}");
+                    }
+                }
+
+                // Fallback: all images
+                if (!imgElements.Any())
+                {
+                    imgElements.AddRange(doc.QuerySelectorAll("img"));
+                }
+
+                int index = 0;
+                foreach (var img in imgElements)
+                {
+                    try
+                    {
+                        string src = img.GetAttribute("src") ?? img.GetAttribute("data-src") ?? img.GetAttribute("data-original");
+                        if (string.IsNullOrEmpty(src)) continue;
+
+                        // Make absolute
+                        string imgUrl = src;
+                        if (imgUrl.StartsWith("//"))
+                        {
+                            imgUrl = (baseUri?.Scheme ?? "https") + ":" + imgUrl;
+                        }
+                        else if (imgUrl.StartsWith("/"))
+                        {
+                            if (baseUri != null)
+                                imgUrl = baseUri.GetLeftPart(UriPartial.Authority) + imgUrl;
+                        }
+                        else if (!imgUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && baseUri != null)
+                        {
+                            // relative path
+                            imgUrl = new Uri(baseUri, imgUrl).ToString();
+                        }
+
+                        // Determine a best-effort name/key for the image
+                        string name = img.GetAttribute("alt") ?? img.GetAttribute("title");
+                        if (string.IsNullOrEmpty(name))
+                        {
+                            // try nearby text nodes: parent, grandparent
+                            var parent = img.ParentElement;
+                            string txt = parent?.TextContent?.Trim();
+                            if (string.IsNullOrEmpty(txt)) txt = parent?.ParentElement?.TextContent?.Trim();
+                            if (!string.IsNullOrEmpty(txt))
+                            {
+                                // take first line and limit length
+                                txt = txt.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
+                                if (!string.IsNullOrEmpty(txt)) name = txt.Length > 120 ? txt.Substring(0, 120) : txt;
+                            }
+                        }
+
+                        if (string.IsNullOrEmpty(name))
+                        {
+                            // fallback to filename
+                            try { name = Path.GetFileNameWithoutExtension(new Uri(imgUrl).AbsolutePath); } catch { name = "image" + index; }
+                        }
+
+                        // Normalize whitespace
+                        name = Regex.Replace(name, "\\s+", " ").Trim();
+
+                        // Ensure unique key
+                        string key = name;
+                        int dup = 1;
+                        while (images.ContainsKey(key))
+                        {
+                            key = name + " (" + dup + ")";
+                            dup++;
+                        }
+
+                        if (!images.ContainsKey(key) && !string.IsNullOrEmpty(imgUrl))
+                        {
+                            images.Add(key, imgUrl);
+                        }
+
+                        index++;
+                    }
+                    catch (Exception exImg)
+                    {
+                        Common.LogError(exImg, false, true, PluginDatabase.PluginName);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+            }
+
+            return images;
         }
     }
 
