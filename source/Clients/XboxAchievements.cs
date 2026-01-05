@@ -206,13 +206,26 @@ namespace SuccessStory.Clients
 
         private async Task<List<Achievement>> GetXboxAchievements(Game game, AuthorizationData authorizationData)
         {
-            List<Func<Game, AuthorizationData, Task<List<Achievement>>>> getAchievementMethods = new List<Func<Game, AuthorizationData, Task<List<Achievement>>>>
+            var getAchievementMethods = new List<Func<Game, AuthorizationData, Task<List<Achievement>>>>
             {
-                GetXboxOneAchievements,
-                GetXbox360Achievements
+                GetXboxOneAchievements
             };
 
-            if (game.Platforms != null && game.Platforms.Any(p => p.SpecificationId == "xbox360"))
+            // Only add Xbox360 retrieval when enabled in settings to avoid unnecessary Xenia lookups/crashes
+            try
+            {
+                if (PluginDatabase?.PluginSettings?.Settings?.EnableXbox360Achievements == true)
+                {
+                    getAchievementMethods.Add(GetXbox360Achievements);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Defensive: log and proceed with Xbox One method only
+                Logger.Warn($"XboxAchievements: failed to evaluate Xbox360 setting - {ex.Message}");
+            }
+
+            if (game.Platforms != null && game.Platforms.Any(p => p.SpecificationId == "xbox360") && getAchievementMethods.Contains(GetXbox360Achievements))
             {
                 getAchievementMethods.Reverse();
             }
