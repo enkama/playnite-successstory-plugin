@@ -83,13 +83,22 @@ namespace SuccessStory.Clients
                 string dataExophaseLocalised = string.Empty;
                 string dataExophase = string.Empty;
 
-                // Try fast HTTP fetch first to avoid slow WebView when possible
-                // Check disk cache first to avoid network and WebView work
+                // Normalize fetch URL and prepare cache key
+                string fetchUrl = searchResult.Url ?? string.Empty;
+                if (fetchUrl.StartsWith("/"))
+                {
+                    fetchUrl = UrlExophase.TrimEnd('/') + fetchUrl;
+                }
+                if (!fetchUrl.Contains("/achievements", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    fetchUrl = fetchUrl.TrimEnd('/') + "/achievements/";
+                }
+                string cacheKeyUrl = fetchUrl;
                 try
                 {
                     var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                     if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                    string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                    string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
                     string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                     if (File.Exists(cacheFile))
                     {
@@ -117,50 +126,175 @@ namespace SuccessStory.Clients
 
                 try
                 {
-                    string fetched = null;
-                    using (var httpClient = new HttpClient())
+                    // Force synchronous WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
+                    try
                     {
-                        httpClient.Timeout = TimeSpan.FromSeconds(6);
-                        httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
-
-                        try
+                        var webData = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
+                        if (!string.IsNullOrEmpty(webData.Item1))
                         {
-                            var resp = httpClient.GetAsync(searchResult.Url).GetAwaiter().GetResult();
-                            if (resp.IsSuccessStatusCode)
+                            dataExophase = webData.Item1;
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        // WebView fetch failed; fall back to HTTP methods
+                        dataExophase = string.Empty;
+                    }
+
+                    if (string.IsNullOrEmpty(dataExophase))
+                    {
+                        // Fallback: try HTTP client then simple download as before
+                        string fetched = null;
+                        using (var httpClient = new HttpClient())
+                        {
+                            httpClient.Timeout = TimeSpan.FromSeconds(15);
+                            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
+
+                            try
                             {
-                                fetched = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                var resp = httpClient.GetAsync(fetchUrl).GetAwaiter().GetResult();
+                                if (resp.IsSuccessStatusCode)
+                                {
+                                    fetched = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // HTTP client fetch failed; allow fallback
                             }
                         }
-                        catch (Exception httpEx)
+
+                        if (!string.IsNullOrEmpty(fetched))
                         {
-                            // Log and allow fallback
-                            Logger.Info($"Exophase HttpClient fetch failed for {searchResult.Url}: {httpEx.Message}");
+                            dataExophase = fetched;
+                        }
+                        else
+                        {
+                            try
+                            {
+                                dataExophase = Web.DownloadStringData(fetchUrl).GetAwaiter().GetResult();
+                            }
+                            catch (Exception ex)
+                            {
+                                Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
+
+                                // Background fetch: parse, cache and register images without blocking
+                                Task.Run(() =>
+                                {
+                                    try
+                                    {
+                                        var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
+                                        var parsed = ParseData(webDataBg.Item1);
+                                        var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
+                                        if (imagesDict.Count > 0)
+                                        {
+                                            var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                                            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+                                            string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                                            string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
+                                            File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
+                                            Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+
+                                            try
+                                            {
+                                                // Also apply images to any existing GameAchievements in the plugin DB so UI updates immediately
+                                                var existing = PluginDatabase.Get(game, true);
+                                                if (existing != null && existing.Items != null && existing.Items.Count > 0)
+                                                {
+                                                    bool changed = false;
+                                                    foreach (var it in existing.Items)
+                                                    {
+                                                        if (it == null) continue;
+                                                        string key = it.Name ?? it.ApiName;
+                                                        if (key.IsNullOrEmpty()) continue;
+                                                        if (imagesDict.TryGetValue(key, out string url))
+                                                        {
+                                                            if (it.UrlUnlocked != url)
+                                                            {
+                                                                it.UrlUnlocked = url;
+                                                                changed = true;
+                                                            }
+                                                        }
+                                                    }
+                                                    if (changed)
+                                                    {
+                                                        PluginDatabase.AddOrUpdate(existing);
+                                                        // Updated DB with new images
+                                                    }
+                                                }
+                                            }
+                                            catch (Exception exUpdate)
+                                            {
+                                                Common.LogError(exUpdate, false, $"Exophase background: failed to apply images to DB for {game.Name}", true, PluginDatabase.PluginName);
+                                            }
+                                        }
+                                    }
+                                    catch (Exception bgEx)
+                                    {
+                                        Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
+                                    }
+                                });
+
+                                dataExophase = string.Empty;
+                            }
                         }
                     }
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
+                    dataExophase = string.Empty;
+                }
 
-                    if (!string.IsNullOrEmpty(fetched))
+                // Check if the fetched page contains achievement lists; some Exophase pages don't include 'Achievements' in <title>
+                bool hasAchievementLists = false;
+                if (!string.IsNullOrEmpty(dataExophase))
+                {
+                    try
                     {
-                        dataExophase = fetched;
+                        var parserCheck = new HtmlParser();
+                        var docCheck = parserCheck.Parse(dataExophase);
+                        hasAchievementLists = (docCheck.QuerySelectorAll("ul.achievement, ul.trophy, ul.challenge")?.Length ?? 0) > 0;
                     }
-                    else
+                    catch (Exception)
                     {
-                        // Try existing fast method (may respect plugin cookies)
-                        try
-                        {
-                            dataExophase = Web.DownloadStringData(searchResult.Url).GetAwaiter().GetResult();
-                        }
-                        catch (Exception ex)
-                        {
-                            // HTTP failed (Cloudflare or other). Schedule background WebView fetch and skip blocking
-                            Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
+                        hasAchievementLists = false;
+                    }
+                }
 
-                            // Background fetch: parse, cache and register images without blocking
+                if (!hasAchievementLists)
+                {
+                    try
+                    {
+                        // Try a blocking WebView fetch to get the fully rendered page (may bypass Cloudflare / JS rendering)
+                        var webData = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
+                        if (!string.IsNullOrEmpty(webData.Item1))
+                        {
+                            try
+                            {
+                                var parserCheck2 = new HtmlParser();
+                                var docCheck2 = parserCheck2.Parse(webData.Item1);
+                                if ((docCheck2.QuerySelectorAll("ul.achievement, ul.trophy, ul.challenge")?.Length ?? 0) > 0)
+                                {
+                                    dataExophase = webData.Item1;
+                                    hasAchievementLists = true;
+                                }
+                            }
+                            catch (Exception)
+                            {
+                                // fall through to schedule background fetch
+                            }
+                        }
+
+                        if (!hasAchievementLists)
+                        {
+                            // Schedule background WebView fetch and skip blocking retrieval
                             Task.Run(() =>
                             {
                                 try
                                 {
-                                    var webData = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
-                                    var parsed = ParseData(webData.Item1);
+                                    var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
+                                    var parsed = ParseData(webDataBg.Item1);
                                     var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
                                     if (imagesDict.Count > 0)
                                     {
@@ -214,42 +348,35 @@ namespace SuccessStory.Clients
                             dataExophase = string.Empty;
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
-                    dataExophase = string.Empty;
-                }
-
-                if (!Regex.IsMatch(dataExophase ?? string.Empty, @"<title>.*?\bAchievements\b.*?</title>", RegexOptions.IgnoreCase))
-                {
-                    Logger.Warn("Exophase page didn't contain achievements title; scheduling background WebView fetch and skipping blocking retrieval");
-
-                    Task.Run(() =>
+                    catch (Exception exWeb)
                     {
-                        try
+                        Common.LogError(exWeb, false, $"Exophase synchronous WebView fetch failed for {searchResult.Url}; scheduling background fetch", true, PluginDatabase.PluginName);
+                        // Fallback to background fetch
+                        Task.Run(() =>
                         {
-                            var webData = Web.DownloadSourceDataWebView(searchResult.Url, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
-                            var parsed = ParseData(webData.Item1);
-                            var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
-                            if (imagesDict.Count > 0)
+                            try
                             {
-                                var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
-                                if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                                string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                                string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
-                                File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
-                                Services.AchievementImageResolver.RegisterImages(game, imagesDict);
-                                // Images cached and registered (background, title missing path)
+                                var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
+                                var parsed = ParseData(webDataBg.Item1);
+                                var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
+                                if (imagesDict.Count > 0)
+                                {
+                                    var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                                    if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+                                    string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                                    string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
+                                    File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
+                                    Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+                                }
                             }
-                        }
-                        catch (Exception bgEx)
-                        {
-                            Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
-                        }
-                    });
+                            catch (Exception bgEx)
+                            {
+                                Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
+                            }
+                        });
 
-                    dataExophase = string.Empty;
+                        dataExophase = string.Empty;
+                    }
                 }
 
                 if (PluginDatabase.PluginSettings.Settings.UseLocalised && !IsConnected())
@@ -265,28 +392,29 @@ namespace SuccessStory.Clients
                 }
                 else if (PluginDatabase.PluginSettings.Settings.UseLocalised)
                 {
-                    try
+                     try
+                     {
+                         dataExophaseLocalised = Web.DownloadStringData(fetchUrl).GetAwaiter().GetResult();
+                     }
+                     catch (Exception)
+                     {
+                         try
+                         {
+                             // Localized fetch via WebView skipped for speed; fall back to non-localized data already fetched.
+                             Common.LogError(new Exception("Exophase localized fetch skipped"), false, $"Skipping Exophase localized WebView fetch for {searchResult.Url} to avoid blocking", true, PluginDatabase.PluginName);
+                             dataExophaseLocalised = string.Empty;
+                         }
+                         catch (Exception ex)
+                         {
+                             Common.LogError(ex, false, "Exophase localized WebView fetch failed", true, PluginDatabase.PluginName);
+                         }
+                     }
+                    // If localized page contains a notice message, skip retries
+                    if (!string.IsNullOrEmpty(dataExophaseLocalised) && dataExophaseLocalised.Contains("Notice Message App"))
                     {
-                        dataExophaseLocalised = Web.DownloadStringData(searchResult.Url).GetAwaiter().GetResult();
+                        // skip additional retries
                     }
-                    catch (Exception)
-                    {
-                        try
-                        {
-                            // Localized fetch via WebView skipped for speed; fall back to non-localized data already fetched.
-                            Common.LogError(new Exception("Exophase localized fetch skipped"), false, $"Skipping Exophase localized WebView fetch for {searchResult.Url} to avoid blocking", true, PluginDatabase.PluginName);
-                            dataExophaseLocalised = string.Empty;
-                        }
-                        catch (Exception ex)
-                        {
-                            Common.LogError(ex, false, "Exophase localized WebView fetch failed", true, PluginDatabase.PluginName);
-                        }
-                    }
-                    if (dataExophaseLocalised.Contains("Notice Message App"))
-                    {
-                        Logger.Warn("Exophase notice message app - skipping additional retries");
-                    }
-                }
+                 }
 
                 List<Achievement> All = ParseData(dataExophase);
                 List<Achievement> AllLocalised = dataExophaseLocalised.IsNullOrEmpty() ? new List<Achievement>() : ParseData(dataExophaseLocalised);

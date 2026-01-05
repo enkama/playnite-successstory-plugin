@@ -926,38 +926,89 @@ namespace SuccessStory.Services
 
                 a.ProgressMaxValue = ids.Count();
 
-                foreach (Guid id in ids)
+                // Use bounded concurrency to refresh multiple games in parallel while limiting resource usage.
+                int maxConcurrency = 4; // tuning: reduce/increase as needed
+                using (var concurrency = new System.Threading.SemaphoreSlim(maxConcurrency))
                 {
-                    Game game = API.Instance.Database.Games.Get(id);
-                    a.Text = $"{PluginName} - {message}"
-                        + "\n\n" + $"{a.CurrentProgressValue}/{a.ProgressMaxValue}"
-                        + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
+                    var tasks = new List<Task>();
+                    int progressCounter = 0;
 
-                    if (a.CancelToken.IsCancellationRequested)
-                    {
-                        break;
-                    }
-
-                    string sourceName = PlayniteTools.GetSourceName(game);
-                    AchievementSource achievementSource = GetAchievementSource(PluginSettings.Settings, game);
-                    string gameName = game.Name;
-                    bool verifToAddOrShow = VerifToAddOrShow(PluginSettings.Settings, game);
-                    GameAchievements gameAchievements = Get(game, true);
-
-                    if (!gameAchievements.IsIgnored && verifToAddOrShow && !gameAchievements.IsManual)
+                    foreach (Guid id in ids)
                     {
                         try
                         {
-                            RefreshNoLoader(id);
+                            // Respect cancellation while waiting for a slot
+                            concurrency.Wait(a.CancelToken);
                         }
-                        catch (Exception ex)
+                        catch (OperationCanceledException)
                         {
-                            Common.LogError(ex, false, true, PluginName);
+                            break;
                         }
+
+                        if (a.CancelToken.IsCancellationRequested)
+                        {
+                            concurrency.Release();
+                            break;
+                        }
+
+                        // Capture id for closure
+                        Guid gameId = id;
+
+                        var task = Task.Run(() =>
+                        {
+                            try
+                            {
+                                Game game = API.Instance.Database.Games.Get(gameId);
+                                // Update progress text (best-effort)
+                                a.Text = PluginName + " - " + ResourceProvider.GetString("LOCCommonProcessing")
+                                    + "\n\n" + $"{a.CurrentProgressValue}/{a.ProgressMaxValue}"
+                                    + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
+
+                                if (a.CancelToken.IsCancellationRequested)
+                                {
+                                    return;
+                                }
+
+                                string sourceName = PlayniteTools.GetSourceName(game);
+                                AchievementSource achievementSource = GetAchievementSource(PluginSettings.Settings, game);
+                                string gameName = game.Name;
+                                bool verifToAddOrShow = VerifToAddOrShow(PluginSettings.Settings, game);
+                                GameAchievements gameAchievements = Get(game, true);
+
+                                if (!gameAchievements.IsIgnored && verifToAddOrShow && !gameAchievements.IsManual)
+                                {
+                                    try
+                                    {
+                                        RefreshNoLoader(gameId);
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Common.LogError(ex, false, true, PluginName);
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                int progress = System.Threading.Interlocked.Increment(ref progressCounter);
+                                a.CurrentProgressValue = progress;
+                                concurrency.Release();
+                            }
+                        }, a.CancelToken);
+
+                        tasks.Add(task);
                     }
 
-                    a.CurrentProgressValue++;
+                    try
+                    {
+                        // Wait for all scheduled tasks to complete, respecting cancellation
+                        Task.WhenAll(tasks).Wait(a.CancelToken);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        // cancelled by user; tasks may be still running but will observe cancellation token
+                    }
                 }
+
                 stopWatch.Stop();
                 TimeSpan ts = stopWatch.Elapsed;
                 Logger.Info($"Task Refresh(){(a.CancelToken.IsCancellationRequested ? " canceled" : string.Empty)} - {string.Format("{0:00}:{1:00}.{2:00}", ts.Minutes, ts.Seconds, ts.Milliseconds / 10)} for {a.CurrentProgressValue}/{ids.Count()} items");

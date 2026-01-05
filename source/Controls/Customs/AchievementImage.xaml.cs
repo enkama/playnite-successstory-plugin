@@ -9,6 +9,7 @@ using System.IO;
 using System.Windows.Media.Animation;
 using CommonPlayniteShared;
 using CommonPluginsShared;
+using System.Windows.Media;
 
 namespace SuccessStory.Controls.Customs
 {
@@ -240,6 +241,18 @@ namespace SuccessStory.Controls.Customs
             }
 
             PART_Image.Source = image;
+            try
+            {
+                // Prefer high-quality scaling when WPF resizes the image to avoid blurry thumbnails
+                RenderOptions.SetBitmapScalingMode(PART_Image, BitmapScalingMode.HighQuality);
+                PART_Image.SnapsToDevicePixels = true;
+                PART_Image.UseLayoutRounding = true;
+            }
+            catch (Exception ex)
+            {
+                // Log unexpected rendering errors to help diagnose issues on different environments
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+            }
         }
 
 
