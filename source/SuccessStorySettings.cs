@@ -383,7 +383,18 @@ namespace SuccessStory
 
 
             Plugin.SavePluginSettings(Settings);
-            SuccessStory.PluginDatabase.PluginSettings = this;
+            // Update the existing PluginDatabase.PluginSettings.Settings instance so existing event
+            // subscriptions are preserved (controls subscribe to PluginDatabase.PluginSettings.PropertyChanged).
+            if (SuccessStory.PluginDatabase?.PluginSettings != null)
+            {
+                // Assigning the Settings property will trigger the view model's PropertyChanged notification
+                // (ObservableObject.SetValue implementation) so subscribed controls are notified.
+                SuccessStory.PluginDatabase.PluginSettings.Settings = this.Settings;
+            }
+            else
+            {
+                SuccessStory.PluginDatabase.PluginSettings = this;
+            }
 
             if (API.Instance.ApplicationInfo.Mode == ApplicationMode.Desktop)
             {
