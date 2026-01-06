@@ -692,6 +692,57 @@ namespace SuccessStory.Clients
                     }
                 });
 
+                var missingMatches = new List<string>();
+                foreach (var y in exophaseAchievements.Items)
+                {
+                    Achievement achievement = gameAchievements.Items.Find(x => x.ApiName.IsEqual(y.ApiName));
+                    if (achievement == null)
+                    {
+                        achievement = gameAchievements.Items.Find(x => x.Name.IsEqual(y.Name));
+                        if (achievement == null)
+                        {
+                            achievement = gameAchievements.Items.Find(x => x.Name.IsEqual(y.ApiName));
+                        }
+                    }
+
+                    if (achievement != null)
+                    {
+                        achievement.ApiName = y.ApiName;
+                        achievement.Percent = y.Percent;
+                        achievement.GamerScore = StoreApi.CalcGamerScore(y.Percent);
+
+                        if (PluginDatabase.PluginSettings.Settings.UseLocalised && IsConnected())
+                        {
+                            achievement.Name = y.Name;
+                            achievement.Description = y.Description;
+                        }
+                    }
+                    else
+                    {
+                        // Collect missing names and log a single summary after processing to avoid flooding logs
+                        try
+                        {
+                            if (!string.IsNullOrEmpty(y.Name))
+                            {
+                                missingMatches.Add(y.Name);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+
+                if (missingMatches.Count > 0)
+                {
+                    // limit output length
+                    int maxShow = 10;
+                    string sample = string.Join(", ", missingMatches.Take(maxShow));
+                    if (missingMatches.Count > maxShow)
+                    {
+                        sample += ", ...";
+                    }
+                    Logger.Warn($"No Exophase (rarity) matching achievements found for {gameAchievements.Name} - {gameAchievements.Id} in {achievementsUrl}: {missingMatches.Count} missing. Examples: {sample}");
+                }
+
                 PluginDatabase.AddOrUpdate(gameAchievements);
             }
             catch (Exception ex)

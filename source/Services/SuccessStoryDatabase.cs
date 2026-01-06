@@ -57,9 +57,12 @@ namespace SuccessStory.Services
                             { AchievementSource.GameJolt, new GameJoltAchievements() },
                             { AchievementSource.Local, SteamAchievements.GetLocalSteamAchievementsProvider() }
                         };
+
+                        // Xbox360 provider added above in the initial dictionary. No conditional probe needed.
                     }
+
+                    return achievementProviders;
                 }
-                return achievementProviders;
             }
         }
 
