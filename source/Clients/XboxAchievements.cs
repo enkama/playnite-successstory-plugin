@@ -77,10 +77,25 @@ namespace SuccessStory.Clients
                 };
             }
 
-            // Set rarity from Exophase
+            // Set rarity from Exophase — guarded to avoid crashing when Exophase integration is broken
             if (gameAchievements.HasAchievements)
             {
-                SuccessStory.ExophaseAchievements.SetRarety(gameAchievements, Services.SuccessStoryDatabase.AchievementSource.Xbox);
+                try
+                {
+                    if (SuccessStory.ExophaseAchievements != null && SuccessStory.ExophaseAchievements.IsConnected())
+                    {
+                        SuccessStory.ExophaseAchievements.SetRarety(gameAchievements, Services.SuccessStoryDatabase.AchievementSource.Xbox);
+                    }
+                    else
+                    {
+                        Logger.Warn("Exophase not connected or unavailable - skipping rarity fetch for Xbox achievements.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Log and continue — do not let Exophase failures crash Xbox achievement retrieval
+                    Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                }
             }
 
             gameAchievements.SetRaretyIndicator();
