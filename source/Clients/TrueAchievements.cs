@@ -120,7 +120,7 @@ namespace SuccessStory.Clients
                         }
                         catch (Exception ex)
                         {
-                            Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                            Logger.Debug(ex, $"Error processing search game result for {url}");
                         }
                     }
                 }
@@ -240,15 +240,7 @@ namespace SuccessStory.Clients
                 Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(gameUrl).GetAwaiter().GetResult();
                 sw.Stop();
-                Logger.Debug($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl}");
-                if (gameUrl.Length > 100)
-                {
-                    Logger.Debug($"GetDataImages web request for: {gameUrl.Substring(0, 100)}...");
-                }
-                else
-                {
-                    Logger.Debug($"GetDataImages web request for: {gameUrl}");
-                }
+                Logger.Debug($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl.Substring(0, Math.Min(100, gameUrl.Length))}{(gameUrl.Length > 100 ? "..." : "")}");
                 
 
                 string response = sourceData.Item1;
@@ -364,7 +356,11 @@ namespace SuccessStory.Clients
                         if (string.IsNullOrEmpty(name))
                         {
                             // fallback to filename
-                            try { name = Path.GetFileNameWithoutExtension(new Uri(imgUrl).AbsolutePath); } catch { name = "image" + index; }
+                            try { name = Path.GetFileNameWithoutExtension(new Uri(imgUrl).AbsolutePath); }
+                            catch (Exception ex)
+                            {
+                                Logger.Debug($"GetDataImages: Failed to extract filename from URL: {ex.Message}");
+                            }
                         }
 
                         // Normalize whitespace
@@ -379,7 +375,7 @@ namespace SuccessStory.Clients
                             dup++;
                         }
 
-                        if (!images.ContainsKey(key) && !string.IsNullOrEmpty(imgUrl))
+                        if (!string.IsNullOrEmpty(imgUrl))
                         {
                             images.Add(key, imgUrl);
                         }
@@ -388,7 +384,7 @@ namespace SuccessStory.Clients
                     }
                     catch (Exception exImg)
                     {
-                        Common.LogError(exImg, false, true, PluginDatabase.PluginName);
+                        Logger.Debug(exImg, $"Error processing image element in GetDataImages for {gameUrl}");
                     }
                 }
             }

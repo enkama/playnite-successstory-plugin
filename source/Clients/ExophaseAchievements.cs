@@ -120,9 +120,9 @@ namespace SuccessStory.Clients
                                     return gameAchievements;
                                 }
                             }
-                            catch
+                            catch (Exception ex)
                             {
-                                // fall back to old format if deserialization fails
+                                Logger.Debug($"Exophase cache deserialization failed, trying old format: {ex.Message}");
                                 var cachedOld = Serialization.FromJson<Dictionary<string, string>>(jsonCache);
                                 if (cachedOld != null && cachedOld.Count > 0)
                                 {
@@ -140,26 +140,26 @@ namespace SuccessStory.Clients
                     Common.LogError(ex, false, "Error reading Exophase cache", true, PluginDatabase.PluginName);
                 }
 
-                try
+                // Run fetch logic off the UI thread to prevent freezing
+                dataExophase = Task.Run(async () =>
                 {
-                    // Force synchronous WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
                     try
                     {
-                        var webData = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
-                        if (!string.IsNullOrEmpty(webData.Item1))
+                        // Try WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
+                        try
                         {
-                            dataExophase = webData.Item1;
+                            var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
+                            if (!string.IsNullOrEmpty(webData.Item1))
+                            {
+                                return webData.Item1;
+                            }
                         }
-                    }
-                    catch (Exception)
-                    {
-                        // WebView fetch failed; fall back to HTTP methods
-                        dataExophase = string.Empty;
-                    }
+                        catch (Exception)
+                        {
+                            // WebView fetch failed; fall back to HTTP methods
+                        }
 
-                    if (string.IsNullOrEmpty(dataExophase))
-                    {
-                        // Fallback: try HTTP client then simple download as before
+                        // Fallback: try HTTP client then simple download
                         string fetched = null;
                         using (var httpClient = new HttpClient())
                         {
@@ -168,45 +168,44 @@ namespace SuccessStory.Clients
 
                             try
                             {
-                                var resp = httpClient.GetAsync(fetchUrl).GetAwaiter().GetResult();
+                                var resp = await httpClient.GetAsync(fetchUrl);
                                 if (resp.IsSuccessStatusCode)
                                 {
-                                    fetched = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                                    fetched = await resp.Content.ReadAsStringAsync();
                                 }
                             }
-                            catch (Exception)
+                            catch (Exception ex)
                             {
-                                // HTTP client fetch failed; allow fallback
+                                Logger.Debug($"Exophase HTTP client fetch failed: {ex.Message}");
                             }
                         }
 
                         if (!string.IsNullOrEmpty(fetched))
                         {
-                            dataExophase = fetched;
+                            return fetched;
                         }
-                        else
+
+                        // Final fallback
+                        try
                         {
-                            try
-                            {
-                                dataExophase = Web.DownloadStringData(fetchUrl).GetAwaiter().GetResult();
-                            }
-                            catch (Exception ex)
-                            {
-                                Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
+                            return await Web.DownloadStringData(fetchUrl);
+                        }
+                        catch (Exception ex)
+                        {
+                            Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
 
-                                // Background fetch: parse, cache and register images without blocking
-                                ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
+                            // Background fetch: parse, cache and register images without blocking
+                            ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
 
-                                dataExophase = string.Empty;
-                            }
+                            return string.Empty;
                         }
                     }
-                }
-                catch (Exception ex)
-                {
-                    Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
-                    dataExophase = string.Empty;
-                }
+                    catch (Exception ex)
+                    {
+                        Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
+                        return string.Empty;
+                    }
+                }).GetAwaiter().GetResult();
 
                 // Check if the fetched page contains achievement lists; some Exophase pages don't include 'Achievements' in <title>
                 bool hasAchievementLists = false;
@@ -218,52 +217,19 @@ namespace SuccessStory.Clients
                         var docCheck = parserCheck.Parse(dataExophase);
                         hasAchievementLists = (docCheck.QuerySelectorAll("ul.achievement, ul.trophy, ul.challenge")?.Length ?? 0) > 0;
                     }
-                    catch (Exception)
+                    catch (Exception ex)
                     {
+                        Logger.Debug($"Exophase achievement list check failed: {ex.Message}");
                         hasAchievementLists = false;
                     }
                 }
 
+                // If no achievement lists found, schedule background fetch for next run
                 if (!hasAchievementLists)
                 {
-                    try
-                    {
-                        // Try a blocking WebView fetch to get the fully rendered page (may bypass Cloudflare / JS rendering)
-                        var webData = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
-                        if (!string.IsNullOrEmpty(webData.Item1))
-                        {
-                            try
-                            {
-                                var parserCheck2 = new HtmlParser();
-                                var docCheck2 = parserCheck2.Parse(webData.Item1);
-                                if ((docCheck2.QuerySelectorAll("ul.achievement, ul.trophy, ul.challenge")?.Length ?? 0) > 0)
-                                {
-                                    dataExophase = webData.Item1;
-                                    hasAchievementLists = true;
-                                }
-                            }
-                            catch (Exception)
-                            {
-                                // fall through to schedule background fetch
-                            }
-                        }
-
-                        if (!hasAchievementLists)
-                        {
-                            // Schedule background WebView fetch and skip blocking retrieval
-                            ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
-
-                            dataExophase = string.Empty;
-                        }
-                    }
-                    catch (Exception exWeb)
-                    {
-                        Common.LogError(exWeb, false, $"Exophase synchronous WebView fetch failed for {searchResult.Url}; scheduling background fetch", true, PluginDatabase.PluginName);
-                        // Fallback to background fetch
-                        ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
-
-                        dataExophase = string.Empty;
-                    }
+                    Logger.Debug($"Exophase: No achievement lists found for {searchResult.Url}, scheduling background fetch");
+                    ScheduleBackgroundFetch(fetchUrl, cacheKeyUrl, game);
+                    dataExophase = string.Empty;
                 }
 
                 if (PluginDatabase.PluginSettings.Settings.UseLocalised && !IsConnected())
@@ -607,7 +573,7 @@ namespace SuccessStory.Clients
                                 missingMatches.Add(y.Name);
                             }
                         }
-                        catch { }
+                        catch (Exception ex) { Logger.Debug($"Exophase missing match collection failed: {ex.Message}"); }
                     }
                 }
 
@@ -798,7 +764,7 @@ namespace SuccessStory.Clients
             });
         }
 
-        private void CacheAndApplyImages(List<Achievement> parsed, string searchResultUrl, Game game)
+        private void CacheAndApplyImages(List<Achievement> parsed, string cacheKeyUrl, Game game)
         {
             // Filter out empty Name/UrlUnlocked and de-duplicate by Name
             var achievementsDict = new Dictionary<string, Achievement>();
@@ -829,8 +795,8 @@ namespace SuccessStory.Clients
                 var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                 if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
 
-                string cacheKey = Regex.Replace(searchResultUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(searchResultUrl);
+                string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(cacheKeyUrl);
                 string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                 File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
 

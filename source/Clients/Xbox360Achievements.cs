@@ -145,16 +145,9 @@ namespace SuccessStory.Clients
 
                         saved = ProcessAchievements(game, gameAchievements, successStoryJsonFile, tempJsonFile, achievementTextFile);
 
-                        var oldData = SuccessStory.PluginDatabase.Get(game.Id, true);
-                        gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
-                        gameAchievements.CopyDiffTo(oldData);
-
-                        SuccessStory.PluginDatabase.Database.OnItemUpdated(
-                            new List<ItemUpdateEvent<GameAchievements>>() {
-                                new ItemUpdateEvent<GameAchievements>(oldData, gameAchievements)
-                            });
-
-                        if (API.Instance.MainView.SelectedGames?.FirstOrDefault()?.Id == game.Id)
+                        // ProcessAchievements handles all persistence via SaveAchievementsAtomically
+                        // Trigger UI refresh if this is the selected game
+                        if (saved && API.Instance.MainView.SelectedGames?.FirstOrDefault()?.Id == game.Id)
                         {
                             API.Instance.MainView.SelectGames(new List<Guid> { game.Id });
                         }
@@ -170,14 +163,9 @@ namespace SuccessStory.Clients
                 _logger.Error(ex, $"Xbox360: Error processing achievements for {game.Name}");
             }
 
-            if (saved)
+            if (!saved)
             {
-                gameAchievements.SetRaretyIndicator();
-                PluginDatabase.AddOrUpdate(gameAchievements);
-            }
-            else
-            {
-                _logger.Warn($"Xbox360: ProcessAchievements failed for {game.Name}, skipping database update to prevent data loss");
+                _logger.Warn($"Xbox360: ProcessAchievements failed for {game.Name}, restoring cached data if available");
                 // Restore old data if possible to return something meaningful
                 gameAchievements = SuccessStory.PluginDatabase.Get(game.Id, true) ?? gameAchievements;
             }
@@ -454,9 +442,7 @@ namespace SuccessStory.Clients
                     // Try to ensure config contains achievement notifications
                     try
                     {
-                    string baseDir = (Directory.Exists(xeniaPath) || xeniaPath.EndsWith(Path.DirectorySeparatorChar.ToString()) || xeniaPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
-                        ? xeniaPath
-                        : Path.GetDirectoryName(xeniaPath) ?? string.Empty;
+                    string baseDir = NormalizeToDirectory(xeniaPath);
                     
                     if (File.Exists(xeniaPath) && !Directory.Exists(xeniaPath))
                     {
@@ -477,6 +463,18 @@ namespace SuccessStory.Clients
                 _logger.Error(ex, "Xbox360: InitializeXeniaEnvironment failed");
                 throw;
             }
+        }
+
+        private string NormalizeToDirectory(string path)
+        {
+            if (Directory.Exists(path) || 
+                path.EndsWith(Path.DirectorySeparatorChar.ToString()) || 
+                path.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+            {
+                return path;
+            }
+            
+            return Path.GetDirectoryName(path) ?? string.Empty;
         }
     }
 }

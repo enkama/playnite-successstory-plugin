@@ -22,6 +22,7 @@ namespace SuccessStory.Clients
     public class XboxAchievements : GenericAchievements
     {
         private readonly object _initLock = new object();
+        private static readonly SemaphoreSlim _isConnectedSemaphore = new SemaphoreSlim(1, 1);
         private static readonly ConcurrentDictionary<string, string> _titleIdCache = new ConcurrentDictionary<string, string>();
         protected static readonly Lazy<XboxAccountClient> xboxAccountClient = new Lazy<XboxAccountClient>(() => new XboxAccountClient(API.Instance, PluginDatabase.Paths.PluginUserDataPath + "\\..\\" + PlayniteTools.GetPluginId(ExternalPlugin.XboxLibrary)));
         internal static XboxAccountClient XboxAccountClient => xboxAccountClient.Value;
@@ -92,7 +93,21 @@ namespace SuccessStory.Clients
                 };
             }
 
-            // Set rarity from Exophase — guarded to avoid crashing when Exophase integration is broken
+            if (AllAchievements.Count > 0)
+            {
+                gameAchievements.Items = AllAchievements;
+            }
+            else
+            {
+                Logger.Warn($"Xbox: No achievements found for {game.Name}, restoring cached data if available");
+                var existing = SuccessStory.PluginDatabase.Get(game.Id, true);
+                if (existing != null)
+                {
+                    gameAchievements.Items = existing.Items;
+                }
+            }
+
+            // Set rarity from Exophase AFTER Items are populated — guarded to avoid crashing when Exophase integration is broken
             if (gameAchievements.HasAchievements)
             {
                 try
@@ -110,20 +125,6 @@ namespace SuccessStory.Clients
                 {
                     // Log and continue — do not let Exophase failures crash Xbox achievement retrieval
                     Common.LogError(ex, false, true, PluginDatabase.PluginName);
-                }
-            }
-
-            if (AllAchievements.Count > 0)
-            {
-                gameAchievements.Items = AllAchievements;
-            }
-            else
-            {
-                Logger.Warn($"Xbox: No achievements found for {game.Name}, restoring cached data if available");
-                var existing = SuccessStory.PluginDatabase.Get(game.Id, true);
-                if (existing != null)
-                {
-                    gameAchievements.Items = existing.Items;
                 }
             }
 
@@ -190,13 +191,31 @@ namespace SuccessStory.Clients
         {
             if (CachedIsConnectedResult == null)
             {
-                bool loggedIn = await XboxAccountClient.GetIsUserLoggedIn();
-                if (!loggedIn && File.Exists(XboxAccountClient.liveTokensPath))
+                await _isConnectedSemaphore.WaitAsync();
+                try
                 {
-                    await XboxAccountClient.RefreshTokens();
-                    loggedIn = await XboxAccountClient.GetIsUserLoggedIn();
+                    // Double-check after acquiring lock
+                    if (CachedIsConnectedResult == null)
+                    {
+                        bool isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
+                        if (!isAuthenticated && File.Exists(XboxAccountClient.liveTokensPath))
+                        {
+                            await XboxAccountClient.RefreshTokens();
+                            isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
+                        }
+
+                        if (!isAuthenticated)
+                        {
+                            Logger.Warn($"{ClientName} user is not authenticated");
+                        }
+
+                        CachedIsConnectedResult = isAuthenticated;
+                    }
                 }
-                CachedIsConnectedResult = loggedIn;
+                finally
+                {
+                    _isConnectedSemaphore.Release();
+                }
             }
 
             return (bool)CachedIsConnectedResult;
