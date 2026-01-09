@@ -307,6 +307,7 @@ namespace SuccessStory.Clients
                         var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                         if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
                         string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                        if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(searchResult.Url);
                         string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                         File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
                         Services.AchievementImageResolver.RegisterImages(game, imagesDict);
@@ -767,13 +768,16 @@ namespace SuccessStory.Clients
         }
 
 
+        private static readonly SemaphoreSlim _bgFetchSemaphore = new SemaphoreSlim(2);
+
         private void ScheduleBackgroundFetch(string fetchUrl, string searchResultUrl, Game game)
         {
-            Task.Run(() =>
+            Task.Run(async () =>
             {
+                await _bgFetchSemaphore.WaitAsync();
                 try
                 {
-                    var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
+                    var webDataBg = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains);
                     if (webDataBg.Item1.IsNullOrEmpty())
                     {
                         Logger.Warn($"Exophase background fetch: no data from {fetchUrl}");
@@ -787,6 +791,10 @@ namespace SuccessStory.Clients
                 {
                     Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResultUrl}", true, PluginDatabase.PluginName);
                 }
+                finally
+                {
+                    _bgFetchSemaphore.Release();
+                }
             });
         }
 
@@ -795,6 +803,8 @@ namespace SuccessStory.Clients
             // Filter out empty Name/UrlUnlocked and de-duplicate by Name
             var achievementsDict = new Dictionary<string, Achievement>();
             var imagesDict = new Dictionary<string, string>();
+            var imagesNormalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var a in parsed)
             {
                 if (a.Name.IsNullOrEmpty()) continue;
@@ -804,6 +814,12 @@ namespace SuccessStory.Clients
                     if (!a.UrlUnlocked.IsNullOrEmpty())
                     {
                         imagesDict.Add(a.Name, a.UrlUnlocked);
+                        
+                        string keyNorm = a.Name.RemoveDiacritics().ToLowerInvariant().Trim();
+                        if (!imagesNormalized.ContainsKey(keyNorm))
+                        {
+                            imagesNormalized.Add(keyNorm, a.UrlUnlocked);
+                        }
                     }
                 }
             }
@@ -833,9 +849,12 @@ namespace SuccessStory.Clients
                         foreach (var it in existing.Items)
                         {
                             if (it == null) continue;
-                            string key = it.Name ?? it.ApiName;
-                            if (key.IsNullOrEmpty()) continue;
-                            if (imagesDict.TryGetValue(key, out string url))
+                            string name = it.Name ?? string.Empty;
+                            string keyNorm = name.RemoveDiacritics().ToLowerInvariant().Trim();
+                            
+                            if (keyNorm.IsNullOrEmpty()) continue;
+
+                            if (imagesNormalized.TryGetValue(keyNorm, out string url))
                             {
                                 if (it.UrlUnlocked != url)
                                 {

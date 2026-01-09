@@ -60,28 +60,31 @@ namespace SuccessStory.Clients
                     }
 
                     // Set source link
-                    if (gameAchievements.HasAchievements)
+                    try
                     {
-                        gameAchievements.SourcesLink = new SourceLink
+                        if (gameAchievements.HasAchievements)
                         {
-                            GameName = game.Name,
-                            Name = "EA",
-                            Url = "https://www.ea.com"
-                        };
+                            gameAchievements.SourcesLink = new SourceLink
+                            {
+                                GameName = game.Name,
+                                Name = "EA",
+                                Url = "https://www.ea.com"
+                            };
 
-                        if (gameAchievements.Items == null || !gameAchievements.Items.Any(x => !x.UrlUnlocked.IsNullOrEmpty()))
-                        {
-                            var images = FetchExternalImages(game);
-                            if (images.Count > 0)
+                            if (gameAchievements.Items == null || !gameAchievements.Items.Any(x => !x.UrlUnlocked.IsNullOrEmpty()))
                             {
-                                MapImagesToAchievements(game, gameAchievements, images);
+                                var images = FetchExternalImages(game);
+                                if (images.Count > 0)
+                                {
+                                    MapImagesToAchievements(game, gameAchievements, images);
+                                }
                             }
                         }
-                            catch (Exception ex)
-                            {
-                                Common.LogError(ex, false, true, PluginDatabase.PluginName);
-                            }
-                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                    }
                     }
                 }
                 catch (Exception ex)
@@ -275,7 +278,7 @@ namespace SuccessStory.Clients
 
         private void MapImagesToAchievements(Game game, GameAchievements gameAchievements, Dictionary<string, string> images)
         {
-            if (images.Count == 0) return;
+            if (images == null || images.Count == 0 || gameAchievements == null) return;
 
             try
             {
@@ -286,12 +289,14 @@ namespace SuccessStory.Clients
                 Common.LogError(exReg, false, "Error registering achievement images", true, PluginDatabase.PluginName);
             }
 
-            var imagesNormalized = new Dictionary<string, string>();
+            var imagesNormalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in images)
             {
                 string keyNorm = normalize(kv.Key);
                 if (!keyNorm.IsNullOrEmpty() && !imagesNormalized.ContainsKey(keyNorm)) imagesNormalized.Add(keyNorm, kv.Value);
             }
+
+            if (gameAchievements.Items == null) return;
 
             foreach (var ach in gameAchievements.Items)
             {

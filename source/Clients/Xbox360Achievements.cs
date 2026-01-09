@@ -22,7 +22,7 @@ namespace SuccessStory.Clients
         private readonly IPlayniteAPI _playniteApi;
         private readonly ILogger _logger;
         private string _xeniaPath;
-        private bool _isInitialized;
+        private volatile bool _isInitialized;
         private readonly object _initLock = new object();
         private const string SUCCESS_STORY_GUID = "cebe6d32-8c46-4459-b993-5a5189d60788";
         private string _playniteAppData;
@@ -40,7 +40,7 @@ namespace SuccessStory.Clients
             // the user's system when Xbox360 support is disabled. Defer initialization until
             // the feature is actually used or when explicit Xenia path is provided.
             _playniteAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            _logger.Info("Xbox360Achievements constructed (lazy init)");
+            _logger.Debug("Xbox360Achievements constructed (lazy init)");
         }
 
         // Overloaded constructor used by settings UI to provide API instance and optional xenia path
@@ -51,15 +51,7 @@ namespace SuccessStory.Clients
             _isInitialized = false;
             _playniteAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             _xeniaPath = xeniaPath; // may be a folder path or exe path depending on caller
-            _logger.Info($"Xbox360Achievements constructed with provided xeniaPath: '{_xeniaPath}'");
-            try
-            {
-                EnsureInitialized();
-            }
-            catch (Exception ex)
-            {
-                _logger.Warn(ex, "Xbox360Achievements initialization failed in overloaded constructor");
-            }
+            _logger.Debug($"Xbox360Achievements constructed with provided xeniaPath: '{_xeniaPath}'");
         }
 
         // Ensure paths and environment are initialized lazily to avoid probing at startup
@@ -93,7 +85,7 @@ namespace SuccessStory.Clients
                     // Fallbacks or defaults can be handled in InitializePaths implementation
                     InitializePaths();
                     _isInitialized = true;
-                    _logger.Info($"Xbox360Achievements initialized. XeniaPath='{_xeniaPath}'");
+                    _logger.Debug($"Xbox360Achievements initialized. XeniaPath='{_xeniaPath}'");
                 }
                 catch (Exception ex)
                 {
@@ -151,7 +143,7 @@ namespace SuccessStory.Clients
                         string tempJsonFile = Path.Combine(_xeniaJsonTempDir, $"{gameId}.json");
                         string achievementTextFile = Path.Combine(_xeniaAchievementsDir, $"{gameId}.txt");
 
-                        saved = ProcessAchievements(gameId, successStoryJsonFile, tempJsonFile, achievementTextFile, game);
+                        saved = ProcessAchievements(game, gameAchievements, successStoryJsonFile, tempJsonFile, achievementTextFile);
 
                         var oldData = SuccessStory.PluginDatabase.Get(game.Id, true);
                         gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
@@ -175,14 +167,19 @@ namespace SuccessStory.Clients
             }
             catch (Exception ex)
             {
-                _logger.Error($"Xbox360: Error processing achievements: {ex.Message}");
-                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+                _logger.Error(ex, $"Xbox360: Error processing achievements for {game.Name}");
             }
 
-            if (!saved)
+            if (saved)
             {
                 gameAchievements.SetRaretyIndicator();
                 PluginDatabase.AddOrUpdate(gameAchievements);
+            }
+            else
+            {
+                _logger.Warn($"Xbox360: ProcessAchievements failed for {game.Name}, skipping database update to prevent data loss");
+                // Restore old data if possible to return something meaningful
+                gameAchievements = SuccessStory.PluginDatabase.Get(game.Id, true) ?? gameAchievements;
             }
             return gameAchievements;
         }
@@ -207,8 +204,7 @@ namespace SuccessStory.Clients
             }
             catch (Exception ex)
             {
-                _logger.Error($"Xbox360: Failed to process achievements: {ex.Message}");
-                _logger.Error(ex, false, true, PluginDatabase.PluginName);
+                _logger.Error(ex, $"Xbox360: Failed to process achievements for {game.Name}");
                 return false;
             }
         }
@@ -292,8 +288,7 @@ namespace SuccessStory.Clients
             }
             catch (Exception ex)
             {
-                _logger.Error($"Xbox360: Failed to parse existing achievements: {ex.Message}");
-                _logger.Error(ex, false, true, PluginDatabase.PluginName);
+                _logger.Error(ex, $"Xbox360: Failed to parse existing achievements from {jsonPath}");
             }
             return new List<Achievement>();
         }
@@ -459,11 +454,17 @@ namespace SuccessStory.Clients
                     // Try to ensure config contains achievement notifications
                     try
                     {
-                        string baseDir = (Directory.Exists(xeniaPath) || xeniaPath.EndsWith(Path.DirectorySeparatorChar.ToString()) || xeniaPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
-                            ? xeniaPath
-                            : Path.GetDirectoryName(xeniaPath) ?? string.Empty;
-                        var cfg = Path.Combine(baseDir, "xenia_canary.config");
-                        UpdateXeniaConfig(cfg);
+                    string baseDir = (Directory.Exists(xeniaPath) || xeniaPath.EndsWith(Path.DirectorySeparatorChar.ToString()) || xeniaPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+                        ? xeniaPath
+                        : Path.GetDirectoryName(xeniaPath) ?? string.Empty;
+                    
+                    if (File.Exists(xeniaPath) && !Directory.Exists(xeniaPath))
+                    {
+                        _xeniaPath = baseDir; // Normalize to directory if a file was provided
+                    }
+
+                    var cfg = Path.Combine(baseDir, "xenia_canary.config");
+                    UpdateXeniaConfig(cfg);
                     }
                     catch (Exception ex)
                     {

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
 using Playnite.SDK;
 using Playnite.SDK.Data;
 using Playnite.SDK.Models;
@@ -20,6 +21,8 @@ namespace SuccessStory.Clients
 {
     public class XboxAchievements : GenericAchievements
     {
+        private readonly object _initLock = new object();
+        private static readonly ConcurrentDictionary<string, string> _titleIdCache = new ConcurrentDictionary<string, string>();
         protected static readonly Lazy<XboxAccountClient> xboxAccountClient = new Lazy<XboxAccountClient>(() => new XboxAccountClient(API.Instance, PluginDatabase.Paths.PluginUserDataPath + "\\..\\" + PlayniteTools.GetPluginId(ExternalPlugin.XboxLibrary)));
         internal static XboxAccountClient XboxAccountClient => xboxAccountClient.Value;
 
@@ -78,9 +81,6 @@ namespace SuccessStory.Clients
             }
 
 
-            gameAchievements.Items = AllAchievements;
-
-
             // Set source link
             if (gameAchievements.HasAchievements)
             {
@@ -113,8 +113,27 @@ namespace SuccessStory.Clients
                 }
             }
 
+            if (AllAchievements.Count > 0)
+            {
+                gameAchievements.Items = AllAchievements;
+            }
+            else
+            {
+                Logger.Warn($"Xbox: No achievements found for {game.Name}, restoring cached data if available");
+                var existing = SuccessStory.PluginDatabase.Get(game.Id, true);
+                if (existing != null)
+                {
+                    gameAchievements.Items = existing.Items;
+                }
+            }
+
             gameAchievements.SetRaretyIndicator();
-            PluginDatabase.AddOrUpdate(gameAchievements);
+
+            // Only update if we actually have items to save (either new ones or restored ones)
+            if (gameAchievements.HasAchievements)
+            {
+                PluginDatabase.AddOrUpdate(gameAchievements);
+            }
             return gameAchievements;
         }
 
@@ -155,7 +174,13 @@ namespace SuccessStory.Clients
                 // Sync-over-async: We run the full async flow on a background thread to avoid deadlocks.
                 // Note: Calling .GetAwaiter().GetResult() from a thread with a synchronization context (like the UI thread)
                 // still carries some risk. Prefer using IsConnectedAsync() whenever possible.
-                CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+                lock (_initLock)
+                {
+                    if (CachedIsConnectedResult == null)
+                    {
+                        CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+                    }
+                }
             }
 
             return (bool)CachedIsConnectedResult;
@@ -198,14 +223,30 @@ namespace SuccessStory.Clients
             }
             else if (!game.GameId.IsNullOrEmpty())
             {
-                TitleHistoryResponse.Title libTitle = Task.Run(async () => await XboxAccountClient.GetTitleInfo(game.GameId)).GetAwaiter().GetResult();
-                if (libTitle != null)
+                try
                 {
-                    titleId = libTitle.titleId;
+                    if (_titleIdCache.TryGetValue(game.GameId, out titleId))
+                    {
+                        return titleId;
+                    }
+
+                    TitleHistoryResponse.Title libTitle = Task.Run(async () => await XboxAccountClient.GetTitleInfo(game.GameId)).GetAwaiter().GetResult();
+                    if (libTitle != null)
+                    {
+                        titleId = libTitle.titleId;
+                        if (!titleId.IsNullOrEmpty())
+                        {
+                            _titleIdCache.TryAdd(game.GameId, titleId);
+                        }
+                    }
+                    else
+                    {
+                        Logger.Warn($"{ClientName} - No title info found for {game.GameId}");
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    Logger.Warn($"{ClientName} - No title info found for {game.GameId}");
+                    Logger.Error(ex, $"{ClientName} - Error fetching title info for {game.GameId}");
                 }
 
                 Common.LogDebug(true, $"{ClientName} - name: {game.Name} - gameId: {game.GameId} - titleId: {titleId}");
@@ -222,35 +263,37 @@ namespace SuccessStory.Clients
                 client.DefaultRequestHeaders.Add("User-Agent", Web.UserAgent);
                 SetAuthenticationHeaders(client.DefaultRequestHeaders, authData, contractVersion);
 
-                HttpResponseMessage response = await client.GetAsync(url);
-                if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                using (HttpResponseMessage response = await client.GetAsync(url))
                 {
-                    if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                    if (response.StatusCode != System.Net.HttpStatusCode.OK)
                     {
-                        Logger.Warn($"{ClientName} - User is not authenticated - {response.StatusCode}");
-                        API.Instance.Notifications.Add(new NotificationMessage(
-                            $"{PluginDatabase.PluginName}-Xbox-notAuthenticate",
-                            $"{PluginDatabase.PluginName}\r\n{ResourceProvider.GetString("LOCSuccessStoryNotificationsXboxNotAuthenticate")}",
-                            NotificationType.Error
-                        ));
-                    }
-                    else
-                    {
-                        Logger.Warn($"{ClientName} - Error on GetXboxAchievements() - {response.StatusCode}");
-                        API.Instance.Notifications.Add(new NotificationMessage(
-                            $"{PluginDatabase.PluginName}-Xbox-webError",
-                            $"{PluginDatabase.PluginName}\r\nXbox achievements: {ResourceProvider.GetString("LOCImportError")}",
-                            NotificationType.Error
-                        ));
+                        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+                        {
+                            Logger.Warn($"{ClientName} - User is not authenticated - {response.StatusCode}");
+                            API.Instance.Notifications.Add(new NotificationMessage(
+                                $"{PluginDatabase.PluginName}-Xbox-notAuthenticate",
+                                $"{PluginDatabase.PluginName}\r\n{ResourceProvider.GetString("LOCSuccessStoryNotificationsXboxNotAuthenticate")}",
+                                NotificationType.Error
+                            ));
+                        }
+                        else
+                        {
+                            Logger.Warn($"{ClientName} - Error on GetXboxAchievements() - {response.StatusCode}");
+                            API.Instance.Notifications.Add(new NotificationMessage(
+                                $"{PluginDatabase.PluginName}-Xbox-webError",
+                                $"{PluginDatabase.PluginName}\r\nXbox achievements: {ResourceProvider.GetString("LOCImportError")}",
+                                NotificationType.Error
+                            ));
+                        }
+
+                        return null;
                     }
 
-                    return null;
+                    string cont = await response.Content.ReadAsStringAsync();
+                    Common.LogDebug(true, cont);
+
+                    return Serialization.FromJson<TContent>(cont);
                 }
-
-                string cont = await response.Content.ReadAsStringAsync();
-                Common.LogDebug(true, cont);
-
-                return Serialization.FromJson<TContent>(cont);
             }
         }
 

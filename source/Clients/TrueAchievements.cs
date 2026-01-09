@@ -240,7 +240,16 @@ namespace SuccessStory.Clients
                 Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(gameUrl).GetAwaiter().GetResult();
                 sw.Stop();
-                Logger.Info($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl}");
+                Logger.Debug($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl}");
+                if (gameUrl.Length > 100)
+                {
+                    Logger.Debug($"GetDataImages web request for: {gameUrl.Substring(0, 100)}...");
+                }
+                else
+                {
+                    Logger.Debug($"GetDataImages web request for: {gameUrl}");
+                }
+                
 
                 string response = sourceData.Item1;
                 if (response.IsNullOrEmpty())
@@ -278,19 +287,15 @@ namespace SuccessStory.Clients
                 {
                     try
                     {
-                        var found = doc.QuerySelectorAll(sel)?.Where(e => e.TagName.Equals("IMG", StringComparison.OrdinalIgnoreCase) || e.QuerySelectorAll("img").Any());
+                        var found = doc.QuerySelectorAll($"{sel} img");
                         if (found != null)
                         {
-                            foreach (var e in found)
-                            {
-                                if (e.TagName.Equals("IMG", StringComparison.OrdinalIgnoreCase)) imgElements.Add(e);
-                                else imgElements.AddRange(e.QuerySelectorAll("img"));
-                            }
+                            imgElements.AddRange(found);
                         }
                     }
                     catch (Exception exSel)
                     {
-                        Logger.Debug($"GetDataImages: selector '{sel}' caused an error: {exSel.Message}");
+                        Logger.Debug($"GetDataImages: selector '{sel} img' caused an error: {exSel.Message}");
                     }
                 }
 

@@ -15,7 +15,8 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using static CommonPluginsShared.PlayniteTools;
 using CommonPluginsShared.Extensions;
-using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Threading;
 using FuzzySharp;
 
 namespace SuccessStory.Services
@@ -24,45 +25,36 @@ namespace SuccessStory.Services
     {
         public SuccessStory Plugin { get; set; }
 
-        private static readonly object AchievementProvidersLock = new object();
-        private static Dictionary<AchievementSource, GenericAchievements> achievementProviders;
+        private static readonly ConcurrentDictionary<AchievementSource, Lazy<GenericAchievements>> achievementProviders = new ConcurrentDictionary<AchievementSource, Lazy<GenericAchievements>>();
         internal static Dictionary<AchievementSource, GenericAchievements> AchievementProviders
         {
             get
             {
-                lock (AchievementProvidersLock)
+                if (achievementProviders.IsEmpty)
                 {
-                    if (achievementProviders == null)
-                    {
-                        achievementProviders = new Dictionary<AchievementSource, GenericAchievements>
-                        {
-                            { AchievementSource.GOG, new GogAchievements() },
-                            { AchievementSource.Epic, new EpicAchievements() },
-                            { AchievementSource.EA, new EaAchievements() },
-                            { AchievementSource.Overwatch, new OverwatchAchievements() },
-                            { AchievementSource.Wow, new WowAchievements() },
-                            { AchievementSource.Playstation, new PSNAchievements() },
-                            { AchievementSource.RetroAchievements, new RetroAchievements() },
-                            { AchievementSource.RPCS3, new Rpcs3Achievements() },
-                            { AchievementSource.ShadPS4, new ShadPS4Achievements() },
-                            { AchievementSource.Xbox360, new Xbox360Achievements() },
-                            { AchievementSource.Starcraft2, new Starcraft2Achievements() },
-                            { AchievementSource.Steam, new SteamAchievements() },
-                            { AchievementSource.Xbox, new XboxAchievements() },
-                            { AchievementSource.GenshinImpact, new GenshinImpactAchievements() },
-                            { AchievementSource.WutheringWaves, new WutheringWavesAchievements() },
-                            { AchievementSource.HonkaiStarRail, new HonkaiStarRailAchievements() },
-                            { AchievementSource.ZenlessZoneZero, new ZenlessZoneZeroAchievements() },
-                            { AchievementSource.GuildWars2, new GuildWars2Achievements() },
-                            { AchievementSource.GameJolt, new GameJoltAchievements() },
-                            { AchievementSource.Local, SteamAchievements.GetLocalSteamAchievementsProvider() }
-                        };
-
-                        // Xbox360 provider added above in the initial dictionary. No conditional probe needed.
-                    }
-
-                    return achievementProviders;
+                    achievementProviders.TryAdd(AchievementSource.GOG, new Lazy<GenericAchievements>(() => new GogAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Epic, new Lazy<GenericAchievements>(() => new EpicAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.EA, new Lazy<GenericAchievements>(() => new EaAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Overwatch, new Lazy<GenericAchievements>(() => new OverwatchAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Wow, new Lazy<GenericAchievements>(() => new WowAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Playstation, new Lazy<GenericAchievements>(() => new PSNAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.RetroAchievements, new Lazy<GenericAchievements>(() => new RetroAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.RPCS3, new Lazy<GenericAchievements>(() => new Rpcs3Achievements()));
+                    achievementProviders.TryAdd(AchievementSource.ShadPS4, new Lazy<GenericAchievements>(() => new ShadPS4Achievements()));
+                    achievementProviders.TryAdd(AchievementSource.Xbox360, new Lazy<GenericAchievements>(() => new Xbox360Achievements()));
+                    achievementProviders.TryAdd(AchievementSource.Starcraft2, new Lazy<GenericAchievements>(() => new Starcraft2Achievements()));
+                    achievementProviders.TryAdd(AchievementSource.Steam, new Lazy<GenericAchievements>(() => new SteamAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Xbox, new Lazy<GenericAchievements>(() => new XboxAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.GenshinImpact, new Lazy<GenericAchievements>(() => new GenshinImpactAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.WutheringWaves, new Lazy<GenericAchievements>(() => new WutheringWavesAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.HonkaiStarRail, new Lazy<GenericAchievements>(() => new HonkaiStarRailAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.ZenlessZoneZero, new Lazy<GenericAchievements>(() => new ZenlessZoneZeroAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.GuildWars2, new Lazy<GenericAchievements>(() => new GuildWars2Achievements()));
+                    achievementProviders.TryAdd(AchievementSource.GameJolt, new Lazy<GenericAchievements>(() => new GameJoltAchievements()));
+                    achievementProviders.TryAdd(AchievementSource.Local, new Lazy<GenericAchievements>(() => SteamAchievements.GetLocalSteamAchievementsProvider()));
                 }
+
+                return achievementProviders.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Value);
             }
         }
 
@@ -878,6 +870,7 @@ namespace SuccessStory.Services
                 return;
             }
 
+            cancellationToken.ThrowIfCancellationRequested();
             Logger.Info($"RefreshNoLoader({game?.Name} - {game?.Id}) - IsIgnored: {loadedItem?.IsIgnored}");
 
             if (loadedItem?.IsManual == true)
@@ -907,6 +900,8 @@ namespace SuccessStory.Services
             {
                 webItem = GetWeb(id);
             }
+
+            cancellationToken.ThrowIfCancellationRequested();
 
             bool mustUpdate = true;
             if (webItem != null && !webItem.HasAchievements)
