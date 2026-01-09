@@ -377,7 +377,7 @@ namespace SuccessStory.Services
         }
 
 
-        private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements)
+        private async Task<GameAchievements> SetEstimateTimeToUnlockAsync(Game game, GameAchievements gameAchievements, CancellationToken cancellationToken = default)
         {
             if (game != null && (gameAchievements?.HasAchievements ?? false))
             {
@@ -389,99 +389,114 @@ namespace SuccessStory.Services
                     bool isSteam = game.Source?.Name?.IsEqual("Steam") ?? false;
                     bool isXbox = game.Source?.Name?.IsEqual("Xbox") ?? false;
 
-                    var searchTask = Task.Run(() =>
+                    using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                     {
-                        try
+                        cts.CancelAfter(TimeSpan.FromSeconds(10));
+
+                        var searchTask = Task.Run(async () =>
                         {
-                            // Define searches to perform
-                            var searches = new List<OriginData>();
-                            if (isSteam)
+                            try
                             {
-                                searches.Add(OriginData.Steam);
-                                searches.Add(OriginData.Xbox);
-                            }
-                            else if (isXbox)
-                            {
-                                searches.Add(OriginData.Xbox);
-                                searches.Add(OriginData.Steam);
-                            }
-                            else
-                            {
-                                searches.Add(OriginData.Xbox);
-                                searches.Add(OriginData.Steam);
-                            }
-
-                            foreach (var origin in searches)
-                            {
-                                string originName = origin == OriginData.Steam ? "Steam" : "Xbox";
-                                try
+                                // Define searches to perform
+                                var searches = new List<OriginData>();
+                                if (isSteam)
                                 {
-                                    List<TrueAchievementSearch> listGames = TrueAchievements.SearchGame(game, origin);
-                                    if (listGames.Count > 0)
+                                    searches.Add(OriginData.Steam);
+                                    searches.Add(OriginData.Xbox);
+                                }
+                                else if (isXbox)
+                                {
+                                    searches.Add(OriginData.Xbox);
+                                    searches.Add(OriginData.Steam);
+                                }
+                                else
+                                {
+                                    searches.Add(OriginData.Xbox);
+                                    searches.Add(OriginData.Steam);
+                                }
+
+                                foreach (var origin in searches)
+                                {
+                                    if (cts.Token.IsCancellationRequested)
                                     {
-                                        var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
-                                            .OrderByDescending(x => x.MatchPercent)
-                                            .ToList();
+                                        Logger.Debug($"SetEstimateTimeToUnlock cancelled for {game.Name}");
+                                        break;
+                                    }
 
-                                        var bestMatch = fuzzList.FirstOrDefault();
-                                        if (bestMatch != null && bestMatch.MatchPercent > 60)
+                                    string originName = origin == OriginData.Steam ? "Steam" : "Xbox";
+                                    try
+                                    {
+                                        List<TrueAchievementSearch> listGames = TrueAchievements.SearchGame(game, origin);
+                                        if (listGames.Count > 0)
                                         {
-                                            if (!bestMatch.Data.GameUrl.IsNullOrEmpty())
-                                            {
-                                                EstimateTimeToUnlock estimateTime = TrueAchievements.GetEstimateTimeToUnlock(bestMatch.Data.GameUrl);
-                                                if (origin == OriginData.Steam) estimateTimeSteam = estimateTime;
-                                                else estimateTimeXbox = estimateTime;
+                                            var fuzzList = listGames.Select(x => new { MatchPercent = Fuzz.Ratio(game.Name, x.GameName), Data = x })
+                                                .OrderByDescending(x => x.MatchPercent)
+                                                .ToList();
 
-                                                // If we found a very good match for our native platform, we can stop here
-                                                if ((isSteam && origin == OriginData.Steam && bestMatch.MatchPercent > 90) ||
-                                                    (isXbox && origin == OriginData.Xbox && bestMatch.MatchPercent > 90))
+                                            var bestMatch = fuzzList.FirstOrDefault();
+                                            if (bestMatch != null && bestMatch.MatchPercent > 60)
+                                            {
+                                                if (!bestMatch.Data.GameUrl.IsNullOrEmpty())
                                                 {
-                                                    Logger.Debug($"Found excellent native match ({bestMatch.MatchPercent}%) for {game.Name} on {originName}. Skipping second search.");
-                                                    break;
+                                                    EstimateTimeToUnlock estimateTime = TrueAchievements.GetEstimateTimeToUnlock(bestMatch.Data.GameUrl);
+                                                    if (origin == OriginData.Steam) estimateTimeSteam = estimateTime;
+                                                    else estimateTimeXbox = estimateTime;
+
+                                                    // If we found a very good match for our native platform, we can stop here
+                                                    if ((isSteam && origin == OriginData.Steam && bestMatch.MatchPercent > 90) ||
+                                                        (isXbox && origin == OriginData.Xbox && bestMatch.MatchPercent > 90))
+                                                    {
+                                                        Logger.Debug($"Found excellent native match ({bestMatch.MatchPercent}%) for {game.Name} on {originName}. Skipping second search.");
+                                                        break;
+                                                    }
+                                                }
+                                                else
+                                                {
+                                                    Logger.Debug($"No TrueAchievements ({originName}) URL for best match of {game.Name}");
                                                 }
                                             }
-                                            else
+                                            else if (bestMatch != null)
                                             {
-                                                Logger.Debug($"No TrueAchievements ({originName}) URL for best match of {game.Name}");
+                                                Logger.Debug($"Best match for {game.Name} on {originName} only had {bestMatch.MatchPercent}% similarity. Skipping.");
                                             }
                                         }
-                                        else if (bestMatch != null)
+                                        else
                                         {
-                                            Logger.Debug($"Best match for {game.Name} on {originName} only had {bestMatch.MatchPercent}% similarity. Skipping.");
+                                            Logger.Debug($"Game not found on TrueAchievements ({originName}) for {game.Name}");
                                         }
                                     }
-                                    else
+                                    catch (Exception ex)
                                     {
-                                        Logger.Debug($"Game not found on TrueAchievements ({originName}) for {game.Name}");
+                                        Logger.Error(ex, $"Error searching TrueAchievements ({originName}) for {game.Name}");
                                     }
                                 }
-                                catch (Exception ex)
-                                {
-                                    Logger.Error(ex, $"Error searching TrueAchievements ({originName}) for {game.Name}");
-                                }
                             }
-                        }
-                        catch (Exception ex)
+                            catch (Exception ex)
+                            {
+                                Logger.Error(ex, "Error in SetEstimateTimeToUnlock search task");
+                            }
+                        }, cts.Token);
+
+                        try
                         {
-                            Logger.Error(ex, "Error in SetEstimateTimeToUnlock search task");
+                            await searchTask;
                         }
-                    });
+                        catch (OperationCanceledException)
+                        {
+                            Logger.Warn($"SetEstimateTimeToUnlock timed out for {game.Name}");
+                            return gameAchievements;
+                        }
 
-                    if (Task.WhenAny(searchTask, Task.Delay(10000)).GetAwaiter().GetResult() != searchTask)
-                    {
-                        Logger.Warn($"SetEstimateTimeToUnlock timed out for {game.Name}");
-                        return gameAchievements;
-                    }
-
-                    if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
-                    {
-                        Common.LogDebug(true, $"Using EstimateTime (Steam) for {game.Name}");
-                        gameAchievements.EstimateTime = estimateTimeSteam;
-                    }
-                    else if (estimateTimeXbox.DataCount > 0)
-                    {
-                        Common.LogDebug(true, $"Using EstimateTime (Xbox) for {game.Name}");
-                        gameAchievements.EstimateTime = estimateTimeXbox;
+                        if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
+                        {
+                            Common.LogDebug(true, $"Using EstimateTime (Steam) for {game.Name}");
+                            gameAchievements.EstimateTime = estimateTimeSteam;
+                        }
+                        else if (estimateTimeXbox.DataCount > 0)
+                        {
+                            Common.LogDebug(true, $"Using EstimateTime (Xbox) for {game.Name}");
+                            gameAchievements.EstimateTime = estimateTimeXbox;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -491,6 +506,12 @@ namespace SuccessStory.Services
             }
 
             return gameAchievements;
+        }
+
+        // Keep synchronous wrapper for backward compatibility
+        private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements)
+        {
+            return SetEstimateTimeToUnlockAsync(game, gameAchievements).GetAwaiter().GetResult();
         }
 
         public enum AchievementSource

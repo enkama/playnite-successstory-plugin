@@ -21,6 +21,8 @@ namespace SuccessStory.Clients
         protected static readonly Lazy<EaApi> eaApi = new Lazy<EaApi>(() => new EaApi(PluginDatabase.PluginName));
         internal static EaApi EaApi => eaApi.Value;
 
+        // Fuzzy matching threshold: minimum proportion of words that must match (0.5 = 50%)
+        private const double WORD_OVERLAP_THRESHOLD = 0.5;
 
         public EaAchievements() : base("EA", CodeLang.GetEaLang(API.Instance.ApplicationSettings.Language), CodeLang.GetCountryFromLast(API.Instance.ApplicationSettings.Language))
         {
@@ -37,11 +39,7 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    ObservableCollection<GameAchievement> originAchievements = Task.Run(() =>
-                    {
-                        var result = EaApi.GetAchievements(game.GameId, EaApi.CurrentAccountInfos);
-                        return result;
-                    }).GetAwaiter().GetResult();
+                    ObservableCollection<GameAchievement> originAchievements = EaApi.GetAchievements(game.GameId, EaApi.CurrentAccountInfos);
 
                     if (originAchievements?.Count > 0)
                     {
@@ -71,7 +69,7 @@ namespace SuccessStory.Clients
                                 Url = "https://www.ea.com"
                             };
 
-                            if (gameAchievements.Items == null || !gameAchievements.Items.Any(x => !x.UrlUnlocked.IsNullOrEmpty()))
+                            if (gameAchievements.Items == null || gameAchievements.Items.All(x => x.UrlUnlocked.IsNullOrEmpty()))
                             {
                                 var images = FetchExternalImages(game);
                                 if (images.Count > 0)
@@ -347,7 +345,7 @@ namespace SuccessStory.Clients
                         foreach (var kv in imagesNormalized)
                         {
                             int overlap = achWords.Count(w => kv.Key.Contains(w));
-                            if (overlap >= Math.Ceiling(achWords.Count / 2.0))
+                            if (overlap >= Math.Ceiling(achWords.Count * WORD_OVERLAP_THRESHOLD))
                             {
                                 ach.UrlUnlocked = kv.Value;
                                 ach.UrlLocked = kv.Value;

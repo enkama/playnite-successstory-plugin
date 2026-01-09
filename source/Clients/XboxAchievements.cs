@@ -282,13 +282,14 @@ namespace SuccessStory.Clients
         {
             Common.LogDebug(true, $"{ClientName} - url: {url}");
 
-            // Use shared HttpClient to prevent socket exhaustion
-            _sharedHttpClient.DefaultRequestHeaders.Clear();
-            _sharedHttpClient.DefaultRequestHeaders.Add("User-Agent", Web.UserAgent);
-            SetAuthenticationHeaders(_sharedHttpClient.DefaultRequestHeaders, authData, contractVersion);
-
-            using (HttpResponseMessage response = await _sharedHttpClient.GetAsync(url))
+            // Create per-request message to avoid thread-safety issues with shared client headers
+            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
             {
+                request.Headers.Add("User-Agent", Web.UserAgent);
+                SetAuthenticationHeaders(request.Headers, authData, contractVersion);
+
+                using (HttpResponseMessage response = await _sharedHttpClient.SendAsync(request))
+                {
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
                     if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
@@ -317,6 +318,7 @@ namespace SuccessStory.Clients
                 Common.LogDebug(true, cont);
 
                 return Serialization.FromJson<TContent>(cont);
+                }
             }
         }
 

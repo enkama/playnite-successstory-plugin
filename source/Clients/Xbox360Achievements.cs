@@ -117,7 +117,21 @@ namespace SuccessStory.Clients
 
             try
             {
-                string xeniaDir = Path.GetDirectoryName(_xeniaPath);
+                // Determine xeniaDir: use _xeniaPath directly if it's a directory, otherwise get its parent
+                string xeniaDir;
+                if (Directory.Exists(_xeniaPath))
+                {
+                    xeniaDir = _xeniaPath;
+                }
+                else if (_xeniaPath.EndsWith(Path.DirectorySeparatorChar.ToString()) || _xeniaPath.EndsWith(Path.AltDirectorySeparatorChar.ToString()))
+                {
+                    xeniaDir = _xeniaPath;
+                }
+                else
+                {
+                    xeniaDir = Path.GetDirectoryName(_xeniaPath);
+                }
+                
                 if (string.IsNullOrEmpty(xeniaDir))
                 {
                     _logger.Warn("Xbox360: Could not determine Xenia directory from path");
@@ -125,11 +139,11 @@ namespace SuccessStory.Clients
                 }
 
                 _xeniaLogFilePath = Path.Combine(xeniaDir, "xenia.log");
-                _xeniaAchievementsDir = Path.Combine(xeniaDir, "Achievements".TrimEnd('\\') + '\\');
+                _xeniaAchievementsDir = Path.Combine(xeniaDir, "Achievements") + Path.DirectorySeparatorChar;
                 
                 _successStoryDataDir = Directory.Exists(Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory"))
-                    ? Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\')
-                    : Path.Combine(_playniteApi.Paths.ApplicationPath, "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\');
+                    ? Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory") + Path.DirectorySeparatorChar
+                    : Path.Combine(_playniteApi.Paths.ApplicationPath, "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory") + Path.DirectorySeparatorChar;
                 
                 _xeniaJsonTempDir = _xeniaAchievementsDir;
 
@@ -450,8 +464,9 @@ namespace SuccessStory.Clients
         public override bool IsConfigured()
         {
             EnsureInitialized();
-            // _xeniaPath is now normalized to a directory, so only check Directory.Exists
-            return !string.IsNullOrEmpty(_xeniaPath) && System.IO.Directory.Exists(_xeniaPath);
+            // Note: _xeniaPath is normalized to a directory by InitializeXeniaEnvironment if called,
+            // but may still be a file path if only set via constructor. Check both file and directory existence.
+            return !string.IsNullOrEmpty(_xeniaPath) && (System.IO.Directory.Exists(_xeniaPath) || System.IO.File.Exists(_xeniaPath));
         }
 
         public override bool EnabledInSettings()
@@ -473,22 +488,26 @@ namespace SuccessStory.Clients
             {
                 if (!string.IsNullOrEmpty(xeniaPath))
                 {
-                    _xeniaPath = xeniaPath;
-                    _isInitialized = false;
-                    EnsureInitialized();
-
-                    // Try to ensure config contains achievement notifications
-                    try
-                    {
+                    // Normalize path first before assigning and calling EnsureInitialized
                     string baseDir = NormalizeToDirectory(xeniaPath);
                     
                     if (File.Exists(xeniaPath) && !Directory.Exists(xeniaPath))
                     {
                         _xeniaPath = baseDir; // Normalize to directory if a file was provided
                     }
+                    else
+                    {
+                        _xeniaPath = xeniaPath;
+                    }
+                    
+                    _isInitialized = false;
+                    EnsureInitialized();
 
-                    var cfg = Path.Combine(baseDir, "xenia_canary.config");
-                    UpdateXeniaConfig(cfg);
+                    // Try to ensure config contains achievement notifications
+                    try
+                    {
+                        var cfg = Path.Combine(baseDir, "xenia_canary.config");
+                        UpdateXeniaConfig(cfg);
                     }
                     catch (Exception ex)
                     {
@@ -512,7 +531,15 @@ namespace SuccessStory.Clients
                 return path;
             }
             
-            return Path.GetDirectoryName(path) ?? string.Empty;
+            // Check if path is actually a file before getting its directory
+            // This prevents "C:\Xenia" (non-existent dir) from becoming "C:\" (parent)
+            if (File.Exists(path))
+            {
+                return Path.GetDirectoryName(path) ?? string.Empty;
+            }
+            
+            // Path doesn't exist - assume it's a directory path
+            return path;
         }
     }
 }

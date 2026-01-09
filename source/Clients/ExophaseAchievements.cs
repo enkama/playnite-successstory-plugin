@@ -72,6 +72,21 @@ namespace SuccessStory.Clients
             CookiesDomains = new List<string> { ".exophase.com" };
 		}
 
+        private static string GetCacheDirectory()
+        {
+            return Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+        }
+
+        private static string GenerateCacheKey(string url)
+        {
+            string cacheKey = Regex.Replace(url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+            if (cacheKey.Length > 100)
+            {
+                cacheKey = url.MD5();
+            }
+            return cacheKey;
+        }
+
 
         public override GameAchievements GetAchievements(Game game)
         {
@@ -106,15 +121,14 @@ namespace SuccessStory.Clients
                 string cacheKeyUrl = fetchUrl;
                 try
                 {
-                    var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                    var cacheDir = GetCacheDirectory();
                     if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                    string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                    if (cacheKey.Length > 100) cacheKey = cacheKeyUrl.MD5();
+                    string cacheKey = GenerateCacheKey(cacheKeyUrl);
                     string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                     if (File.Exists(cacheFile))
                     {
                         var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(cacheFile);
-                        if (age.TotalDays <= 30)
+                        if (age.TotalDays <= CACHE_EXPIRATION_DAYS)
                         {
                             // load cached achievements quickly
                             var jsonCache = File.ReadAllText(cacheFile);
@@ -274,10 +288,9 @@ namespace SuccessStory.Clients
                     var imagesDict = All.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
                     if (imagesDict.Count > 0)
                     {
-                        var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                        var cacheDir = GetCacheDirectory();
                         if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                        string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                        if (cacheKey.Length > 100) cacheKey = searchResult.Url.MD5();
+                        string cacheKey = GenerateCacheKey(searchResult.Url);
                         string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                         File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
                         Services.AchievementImageResolver.RegisterImages(game, imagesDict);
@@ -383,7 +396,7 @@ namespace SuccessStory.Clients
             }
 
             // Wait for cookies to be flushed to disk
-            Thread.Sleep(2000);
+            Thread.Sleep(COOKIE_FLUSH_WAIT_MS);
             List<HttpCookie> httpCookies = CookiesTools.GetWebCookies(true);
             
             if (httpCookies.Count > 0)
@@ -512,37 +525,8 @@ namespace SuccessStory.Clients
             try
             {
                 GameAchievements exophaseAchievements = GetAchievements(gameAchievements.Game, achievementsUrl);
-                exophaseAchievements.Items.ForEach(y =>
-                {
-                    Achievement achievement = gameAchievements.Items.Find(x => x.ApiName.IsEqual(y.ApiName));
-                    if (achievement == null)
-                    {
-                        achievement = gameAchievements.Items.Find(x => x.Name.IsEqual(y.Name));
-                        if (achievement == null)
-                        {
-                            achievement = gameAchievements.Items.Find(x => x.Name.IsEqual(y.ApiName));
-                        }
-                    }
-
-                    if (achievement != null)
-                    {
-                        achievement.ApiName = y.ApiName;
-                        achievement.Percent = y.Percent;
-                        achievement.GamerScore = StoreApi.CalcGamerScore(y.Percent);
-
-                        if (PluginDatabase.PluginSettings.Settings.UseLocalised && IsConnected())
-                        {
-                            achievement.Name = y.Name;
-                            achievement.Description = y.Description;
-                        }
-                    }
-                    else
-                    {
-                        Logger.Warn($"No Exophase (rarity) matching achievements found for {gameAchievements.Name} - {gameAchievements.Id} - {y.Name} in {achievementsUrl}");
-                    }
-                });
-
                 var missingMatches = new List<string>();
+                
                 foreach (var y in exophaseAchievements.Items)
                 {
                     Achievement achievement = gameAchievements.Items.Find(x => x.ApiName.IsEqual(y.ApiName));
@@ -796,11 +780,10 @@ namespace SuccessStory.Clients
 
             if (achievementsDict.Count > 0)
             {
-                var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                var cacheDir = GetCacheDirectory();
                 if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
 
-                string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                if (cacheKey.Length > 100) cacheKey = cacheKeyUrl.MD5();
+                string cacheKey = GenerateCacheKey(cacheKeyUrl);
                 string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                 File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
 
