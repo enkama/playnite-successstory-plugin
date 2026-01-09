@@ -315,18 +315,30 @@ namespace SuccessStory.Clients
                     }
                 }
 
+                // Word overlap matching - pre-compute word tokens for images
                 if (!assigned && !ach.Name.IsNullOrEmpty())
                 {
-                    var achWords = ach.Name.RemoveDiacritics().ToLowerInvariant().Split(new[] { ' ', '\t', '\n', '\r', ',', ':', '-', '–' }, StringSplitOptions.RemoveEmptyEntries).Select(w => Regex.Replace(w, "[^a-z0-9]", "")).Where(w => w.Length > 2).ToList();
+                    string achNorm = ach.Name.RemoveDiacritics().Trim().ToLowerInvariant();
+                    achNorm = Regex.Replace(achNorm, @"[^a-z0-9\s]", "");
+                    var achWords = achNorm.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                        .Where(w => w.Length > 2).ToList();
+
                     if (achWords.Count > 0)
                     {
-                        foreach (var kv in imagesNormalized)
+                        // Pre-compute word sets for images (done once per achievement set)
+                        var imageWordSets = imagesNormalized.ToDictionary(
+                            kv => kv.Key,
+                            kv => kv.Key.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                                .Where(w => w.Length > 2).ToHashSet()
+                        );
+
+                        foreach (var kv in imageWordSets)
                         {
-                            int overlap = achWords.Count(w => kv.Key.Contains(w));
+                            int overlap = achWords.Count(w => kv.Value.Contains(w));
                             if (overlap >= Math.Ceiling(achWords.Count * WORD_OVERLAP_THRESHOLD))
                             {
-                                ach.UrlUnlocked = kv.Value;
-                                ach.UrlLocked = kv.Value;
+                                ach.UrlUnlocked = imagesNormalized[kv.Key];
+                                ach.UrlLocked = imagesNormalized[kv.Key];
                                 assigned = true;
                                 break;
                             }

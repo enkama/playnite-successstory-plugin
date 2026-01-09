@@ -258,19 +258,48 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    if (_titleIdCache.TryGetValue(game.GameId, out titleId))
+                    if (_titleIdCache.TryGetValue(game.GameId, out string cachedTitleId))
                     {
-                        return titleId;
+                        return cachedTitleId;
                     }
 
-                    TitleHistoryResponse.Title libTitle = Task.Run(async () => await XboxAccountClient.GetTitleInfo(game.GameId)).GetAwaiter().GetResult();
-                    if (libTitle != null)
+                    // The following code block was incorrectly placed here in the user's instruction.
+                    // It defines a property, which cannot be nested inside a method.
+                    // The instruction also mentioned "Update SourceLink to use async GetTitleIdAsync",
+                    // but the provided code snippet does not call an async method directly.
+                    // Assuming the intent was to define a SourceLink property elsewhere,
+                    // but since the instruction explicitly placed it here, and it's syntactically invalid,
+                    // I'm commenting it out to maintain a syntactically correct file based on the user's
+                    // provided context, while noting the issue.
+                    // If this property was meant to replace an existing one or be added at a class level,
+                    // please provide a more precise instruction for its placement.
+
+                    // public override string SourceLink
+                    // {
+                    //     get
+                    //     {
+                    //         try
+                    //         {
+                    //             if (CurrentGameAchievements?.Game != null)
+                    //             {
+                    //                 // Use cached title ID if available, otherwise return empty
+                    //                 // Full async fetch happens during GetAchievements
+                    //                 if (_titleIdCache.TryGetValue(CurrentGameAchievements.Game.GameId, out string titleId) && !string.IsNullOrEmpty(titleId))
+                    //                 {
+                    //                     return $"https://www.trueachievements.com/game/{titleId}/achievements";
+                    //                 }
+                    //             }
+                    //         }
+                    //         catch { }
+                    //         return string.Empty;
+                    //     }
+                    // }
+
+                    var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId);
+                    if (titleInfo != null && !string.IsNullOrEmpty(titleInfo.titleId))
                     {
-                        titleId = libTitle.titleId;
-                        if (!titleId.IsNullOrEmpty())
-                        {
-                            _titleIdCache.TryAdd(game.GameId, titleId);
-                        }
+                        _titleIdCache.TryAdd(game.GameId, titleInfo.titleId);
+                        return titleInfo.titleId;
                     }
                     else
                     {
@@ -343,7 +372,7 @@ namespace SuccessStory.Clients
             if (PluginDatabase?.PluginSettings?.Settings?.EnableXbox360Achievements == true)
             {
                 getAchievementMethods.Add(GetXbox360Achievements);
-                Logger.Warn("Xbox360 achievements enabled - adding to fetch methods");
+                Logger.Info("Xbox360 achievements enabled - adding to fetch methods");
             }
 
             if (game.Platforms != null && game.Platforms.Any(p => p.SpecificationId == "xbox360") && getAchievementMethods.Contains(GetXbox360Achievements))
@@ -525,16 +554,15 @@ namespace SuccessStory.Clients
 
         #region IDisposable
 
-        private static bool _disposed = false;
+        private static int _disposed = 0;
 
         /// <summary>
         /// Cleanup method to dispose of static resources. Should be called when plugin unloads.
         /// </summary>
         public static void Cleanup()
         {
-            if (!_disposed)
-            {
-                _disposed = true;
+            // Use Interlocked for thread-safe disposal check
+            if (Interlocked.CompareExchange(ref _disposed, 1, 0) == 0)
                 
                 try
                 {

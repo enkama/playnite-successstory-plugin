@@ -28,32 +28,29 @@ namespace SuccessStory.Services
 
         private static readonly Lazy<Dictionary<AchievementSource, GenericAchievements>> achievementProviders = new Lazy<Dictionary<AchievementSource, GenericAchievements>>(() =>
         {
-            var providers = new Dictionary<AchievementSource, Lazy<GenericAchievements>>
+            return new Dictionary<AchievementSource, GenericAchievements>
             {
-                { AchievementSource.GOG, new Lazy<GenericAchievements>(() => new GogAchievements()) },
-                { AchievementSource.Epic, new Lazy<GenericAchievements>(() => new EpicAchievements()) },
-                { AchievementSource.EA, new Lazy<GenericAchievements>(() => new EaAchievements()) },
-                { AchievementSource.Overwatch, new Lazy<GenericAchievements>(() => new OverwatchAchievements()) },
-                { AchievementSource.Wow, new Lazy<GenericAchievements>(() => new WowAchievements()) },
-                { AchievementSource.Playstation, new Lazy<GenericAchievements>(() => new PSNAchievements()) },
-                { AchievementSource.RetroAchievements, new Lazy<GenericAchievements>(() => new RetroAchievements()) },
-                { AchievementSource.RPCS3, new Lazy<GenericAchievements>(() => new Rpcs3Achievements()) },
-                { AchievementSource.ShadPS4, new Lazy<GenericAchievements>(() => new ShadPS4Achievements()) },
-                { AchievementSource.Xbox360, new Lazy<GenericAchievements>(() => new Xbox360Achievements()) },
-                { AchievementSource.Starcraft2, new Lazy<GenericAchievements>(() => new Starcraft2Achievements()) },
-                { AchievementSource.Steam, new Lazy<GenericAchievements>(() => new SteamAchievements()) },
-                { AchievementSource.Xbox, new Lazy<GenericAchievements>(() => new XboxAchievements()) },
-                { AchievementSource.GenshinImpact, new Lazy<GenericAchievements>(() => new GenshinImpactAchievements()) },
-                { AchievementSource.WutheringWaves, new Lazy<GenericAchievements>(() => new WutheringWavesAchievements()) },
-                { AchievementSource.HonkaiStarRail, new Lazy<GenericAchievements>(() => new HonkaiStarRailAchievements()) },
-                { AchievementSource.ZenlessZoneZero, new Lazy<GenericAchievements>(() => new ZenlessZoneZeroAchievements()) },
-                { AchievementSource.GuildWars2, new Lazy<GenericAchievements>(() => new GuildWars2Achievements()) },
-                { AchievementSource.GameJolt, new Lazy<GenericAchievements>(() => new GameJoltAchievements()) },
-                { AchievementSource.Local, new Lazy<GenericAchievements>(() => SteamAchievements.GetLocalSteamAchievementsProvider()) }
+                { AchievementSource.GOG, new GogAchievements() },
+                { AchievementSource.Epic, new EpicAchievements() },
+                { AchievementSource.EA, new EaAchievements() },
+                { AchievementSource.Overwatch, new OverwatchAchievements() },
+                { AchievementSource.Wow, new WowAchievements() },
+                { AchievementSource.Playstation, new PSNAchievements() },
+                { AchievementSource.RetroAchievements, new RetroAchievements() },
+                { AchievementSource.RPCS3, new Rpcs3Achievements() },
+                { AchievementSource.ShadPS4, new ShadPS4Achievements() },
+                { AchievementSource.Xbox360, new Xbox360Achievements() },
+                { AchievementSource.Starcraft2, new Starcraft2Achievements() },
+                { AchievementSource.Steam, new SteamAchievements() },
+                { AchievementSource.Xbox, new XboxAchievements() },
+                { AchievementSource.GenshinImpact, new GenshinImpactAchievements() },
+                { AchievementSource.WutheringWaves, new WutheringWavesAchievements() },
+                { AchievementSource.HonkaiStarRail, new HonkaiStarRailAchievements() },
+                { AchievementSource.ZenlessZoneZero, new ZenlessZoneZeroAchievements() },
+                { AchievementSource.GuildWars2, new GuildWars2Achievements() },
+                { AchievementSource.GameJolt, new GameJoltAchievements() },
+                { AchievementSource.Local, SteamAchievements.GetLocalSteamAchievementsProvider() }
             };
-            
-            // Materialize all providers once and cache
-            return providers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Value);
         });
 
         public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
