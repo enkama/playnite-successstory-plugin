@@ -35,7 +35,7 @@ namespace SuccessStory.Clients
         {
             _playniteApi = API.Instance;
             _logger = LogManager.GetLogger();
-            _isInitialized = false;
+            // _isInitialized defaults to false, no need to set explicitly
             // Do not read Xenia path or initialize paths at construction time to avoid probing
             // the user's system when Xbox360 support is disabled. Defer initialization until
             // the feature is actually used or when explicit Xenia path is provided.
@@ -48,7 +48,7 @@ namespace SuccessStory.Clients
         {
             _playniteApi = apiInstance ?? API.Instance;
             _logger = LogManager.GetLogger();
-            _isInitialized = false;
+            // _isInitialized defaults to false, no need to set explicitly
             _playniteAppData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             _xeniaPath = xeniaPath; // may be a folder path or exe path depending on caller
             _logger.Debug($"Xbox360Achievements constructed with provided xeniaPath: '{_xeniaPath}'");
@@ -363,12 +363,7 @@ namespace SuccessStory.Clients
                         var existingAchievement = gameAchievements.Items.FirstOrDefault(x => x.Name == newAchievement.Name);
                         if (existingAchievement != null)
                         {
-                            DateTime formattedDate = newAchievement.DateUnlocked.Value;
-                            existingAchievement.DateUnlocked = DateTime.ParseExact(
-                                formattedDate.ToString("yyyy-MM-ddTHH:mm:ss"),
-                                "yyyy-MM-ddTHH:mm:ss",
-                                System.Globalization.CultureInfo.InvariantCulture
-                            );
+                            existingAchievement.DateUnlocked = newAchievement.DateUnlocked.Value;
                         }
                     }
                 }
@@ -488,22 +483,19 @@ namespace SuccessStory.Clients
             {
                 if (!string.IsNullOrEmpty(xeniaPath))
                 {
-                    // Normalize path first before assigning and calling EnsureInitialized
+                    // Normalize path first
                     string baseDir = NormalizeToDirectory(xeniaPath);
                     
-                    if (File.Exists(xeniaPath) && !Directory.Exists(xeniaPath))
+                    // Use lock to prevent other threads from observing partially-reset state
+                    lock (_initLock)
                     {
-                        _xeniaPath = baseDir; // Normalize to directory if a file was provided
+                        _xeniaPath = baseDir;
+                        _isInitialized = false;
+                        EnsureInitialized();
                     }
-                    else
-                    {
-                        _xeniaPath = xeniaPath;
-                    }
-                    
-                    _isInitialized = false;
-                    EnsureInitialized();
 
                     // Try to ensure config contains achievement notifications
+                    // (done outside lock since it's not critical for initialization state)
                     try
                     {
                         var cfg = Path.Combine(baseDir, "xenia_canary.config");
@@ -522,6 +514,12 @@ namespace SuccessStory.Clients
             }
         }
 
+        /// <summary>
+        /// Normalizes a path to a directory path.
+        /// If the path exists as a directory or has a trailing separator, returns it as-is.
+        /// If the path exists as a file, returns its parent directory.
+        /// If the path doesn't exist, assumes it's intended to be a directory path and returns it as-is.
+        /// </summary>
         private string NormalizeToDirectory(string path)
         {
             if (Directory.Exists(path) || 
@@ -539,6 +537,7 @@ namespace SuccessStory.Clients
             }
             
             // Path doesn't exist - assume it's a directory path
+            // Note: This assumption may be incorrect if caller intended a non-existent file path
             return path;
         }
     }

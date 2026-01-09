@@ -195,13 +195,13 @@ namespace SuccessStory.Clients
                     if (exSearch?.Count > 0)
                     {
                         SearchResult exMatch = exSearch.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
-                        if (exMatch == null) exMatch = exSearch.FirstOrDefault(s => prefersPc(s));
+                        if (exMatch == null) exMatch = exSearch.FirstOrDefault(s => PrefersPc(s));
 
                         var exSearchFiltered = exSearch.Where(x => !((x.Name ?? string.Empty).IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 || (x.Name ?? string.Empty).IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0 || (x.Platforms != null && x.Platforms.Any(p => p.IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 || p.IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0)))).ToList();
                         if (exSearchFiltered.Count > 0)
                         {
                             if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
-                            if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(s => prefersPc(s));
+                            if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(s => PrefersPc(s));
                             if (exMatch == null)
                             {
                                 string normalizedGame = NormalizeGameName(game.Name);
@@ -297,7 +297,7 @@ namespace SuccessStory.Clients
             var imagesNormalized = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in images)
             {
-                string keyNorm = normalize(kv.Key);
+                string keyNorm = Normalize(kv.Key);
                 if (!keyNorm.IsNullOrEmpty() && !imagesNormalized.ContainsKey(keyNorm)) imagesNormalized.Add(keyNorm, kv.Value);
             }
 
@@ -305,7 +305,7 @@ namespace SuccessStory.Clients
 
             foreach (var ach in gameAchievements.Items)
             {
-                string achNorm = normalize(ach.Name);
+                string achNorm = Normalize(ach.Name);
                 bool assigned = false;
 
                 if (!achNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(achNorm, out string imgUrl))
@@ -317,7 +317,7 @@ namespace SuccessStory.Clients
 
                 if (!assigned)
                 {
-                    string apiNorm = normalize(ach.ApiName);
+                    string apiNorm = Normalize(ach.ApiName);
                     if (!apiNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(apiNorm, out imgUrl))
                     {
                         ach.UrlUnlocked = imgUrl;
@@ -359,7 +359,7 @@ namespace SuccessStory.Clients
         }
 
 
-        private static bool prefersPc(SearchResult s)
+        private static bool PrefersPc(SearchResult s)
         {
             if (s == null) return false;
             bool platformMatch = s.Platforms?.Any(p => p.Contains("PC", StringComparison.InvariantCultureIgnoreCase) || p.Contains("Windows", StringComparison.InvariantCultureIgnoreCase) || p.Contains("Origin", StringComparison.InvariantCultureIgnoreCase)) ?? false;
@@ -368,7 +368,7 @@ namespace SuccessStory.Clients
         }
 
 
-        private static string normalize(string s)
+        private static string Normalize(string s)
         {
             if (string.IsNullOrEmpty(s))
             {

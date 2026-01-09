@@ -21,7 +21,7 @@ using SuccessStory.Models.Xbox;
 
 namespace SuccessStory.Clients
 {
-    public class XboxAchievements : GenericAchievements
+    public class XboxAchievements : GenericAchievements, IDisposable
     {
         private static readonly object _initLock = new object();
         private static readonly SemaphoreSlim _isConnectedSemaphore = new SemaphoreSlim(1, 1);
@@ -519,6 +519,30 @@ namespace SuccessStory.Clients
             headers.Add("Accept-Language", LocalLang);
         }
         
+        #endregion
+
+        #region IDisposable
+
+        private static bool _disposed = false;
+
+        /// <summary>
+        /// Cleanup method to dispose of static resources. Should be called when plugin unloads.
+        /// </summary>
+        public static void Cleanup()
+        {
+            if (!_disposed)
+            {
+                _disposed = true;
+                _isConnectedSemaphore?.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            // Instance dispose - static cleanup should be called separately via Cleanup()
+            // This is here to satisfy IDisposable interface
+        }
+
         #endregion
     }
 }

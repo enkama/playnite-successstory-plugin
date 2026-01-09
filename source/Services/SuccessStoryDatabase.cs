@@ -508,7 +508,12 @@ namespace SuccessStory.Services
             return gameAchievements;
         }
 
-        // Keep synchronous wrapper for backward compatibility
+        /// <summary>
+        /// Synchronous wrapper for SetEstimateTimeToUnlockAsync.
+        /// WARNING: This method uses .GetAwaiter().GetResult() which can deadlock on UI synchronization contexts.
+        /// DO NOT call this from UI threads. Prefer calling SetEstimateTimeToUnlockAsync directly and awaiting it.
+        /// This wrapper exists only for backward compatibility with synchronous callers.
+        /// </summary>
         private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements)
         {
             return SetEstimateTimeToUnlockAsync(game, gameAchievements).GetAwaiter().GetResult();
