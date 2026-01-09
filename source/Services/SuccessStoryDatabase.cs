@@ -17,6 +17,7 @@ using static CommonPluginsShared.PlayniteTools;
 using CommonPluginsShared.Extensions;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.Threading.Tasks;
 using FuzzySharp;
 
 namespace SuccessStory.Services

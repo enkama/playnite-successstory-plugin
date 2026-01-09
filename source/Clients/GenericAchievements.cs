@@ -13,6 +13,7 @@ using System.Security.Principal;
 using CommonPlayniteShared.Common;
 using static CommonPluginsShared.PlayniteTools;
 using Playnite.SDK.Plugins;
+using System.Threading.Tasks;
 
 namespace SuccessStory.Clients
 {

@@ -99,7 +99,7 @@ namespace SuccessStory.Clients
                     var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                     if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
                     string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                    if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(cacheKeyUrl);
+                    if (cacheKey.Length > 100) cacheKey = cacheKeyUrl.MD5();
                     string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                     if (File.Exists(cacheFile))
                     {
@@ -273,7 +273,7 @@ namespace SuccessStory.Clients
                         var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                         if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
                         string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                        if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(searchResult.Url);
+                        if (cacheKey.Length > 100) cacheKey = searchResult.Url.MD5();
                         string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                         File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
                         Services.AchievementImageResolver.RegisterImages(game, imagesDict);
@@ -796,7 +796,7 @@ namespace SuccessStory.Clients
                 if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
 
                 string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(cacheKeyUrl);
+                if (cacheKey.Length > 100) cacheKey = cacheKeyUrl.MD5();
                 string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                 File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
 

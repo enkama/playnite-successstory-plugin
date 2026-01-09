@@ -85,7 +85,6 @@ namespace SuccessStory.Clients
                     {
                         Common.LogError(ex, false, true, PluginDatabase.PluginName);
                     }
-                    }
                 }
                 catch (Exception ex)
                 {

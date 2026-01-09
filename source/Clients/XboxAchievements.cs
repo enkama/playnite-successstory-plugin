@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using System.Threading;
 using Playnite.SDK;
 using Playnite.SDK.Data;
 using Playnite.SDK.Models;
@@ -14,6 +15,7 @@ using SuccessStory.Models;
 using CommonPluginsShared.Models;
 using CommonPluginsShared.Extensions;
 using static CommonPluginsShared.PlayniteTools;
+using Playnite.SDK.Plugins;
 using CommonPlayniteShared.PluginLibrary.XboxLibrary.Services;
 using SuccessStory.Models.Xbox;
 
