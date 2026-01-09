@@ -191,32 +191,10 @@ namespace SuccessStory.Clients
                         exSearch = SuccessStory.ExophaseAchievements.SearchGame(game.Name);
                     }
 
-                    if (exSearch?.Count > 0)
+                    if (exSearch != null && exSearch.Count > 0)
                     {
-                        SearchResult exMatch = exSearch.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
-                        if (exMatch == null) exMatch = exSearch.FirstOrDefault(s => PrefersPc(s));
-
-                        var exSearchFiltered = exSearch.Where(x => !IsNintendoOrSwitchPlatform(x)).ToList();
-                        if (exSearchFiltered.Count > 0)
-                        {
-                            if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
-                            if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(s => PrefersPc(s));
-                            if (exMatch == null)
-                            {
-                                string normalizedGame = NormalizeGameName(game.Name);
-                                exMatch = exSearchFiltered.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
-                            }
-                            if (exMatch == null) exMatch = exSearchFiltered.First();
-                        }
-
-                        if (exMatch == null)
-                        {
-                            string normalizedGame = NormalizeGameName(game.Name);
-                            exMatch = exSearch.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
-                        }
-                        if (exMatch == null) exMatch = exSearch.First();
-
-                        if (!exMatch.Url.IsNullOrEmpty())
+                        SearchResult exMatch = FindBestExophaseMatch(exSearch, game);
+                        if (exMatch != null && !exMatch.Url.IsNullOrEmpty())
                         {
                             string exUrl = exMatch.Url;
                             if (exUrl.StartsWith("/")) exUrl = "https://www.exophase.com" + exUrl;
@@ -333,6 +311,7 @@ namespace SuccessStory.Clients
                         ach.UrlUnlocked = found.Value;
                         ach.UrlLocked = found.Value;
                         assigned = true;
+                        Logger.Debug($"EA: Fuzzy matched '{ach.Name}' to image key '{found.Key}'");
                     }
                 }
 
@@ -357,6 +336,61 @@ namespace SuccessStory.Clients
             }
         }
 
+        private static SearchResult FindBestExophaseMatch(List<SearchResult> searchResults, Game game)
+        {
+            // Try exact EA platform match
+            var match = searchResults.FirstOrDefault(x => 
+                x.Platforms != null && 
+                x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
+            
+            if (match == null)
+            {
+                // Try PC preference
+                match = searchResults.FirstOrDefault(s => PrefersPc(s));
+            }
+
+            // Filter out Nintendo/Switch platforms
+            var filtered = searchResults.Where(x => !IsNintendoOrSwitchPlatform(x)).ToList();
+            if (filtered.Count > 0 && match == null)
+            {
+                // Try EA platform in filtered results
+                match = filtered.FirstOrDefault(x => 
+                    x.Platforms != null && 
+                    x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
+                
+                if (match == null)
+                {
+                    // Try PC in filtered
+                    match = filtered.FirstOrDefault(s => PrefersPc(s));
+                }
+                
+                if (match == null)
+                {
+                    // Try normalized name match
+                    string normalizedGame = NormalizeGameName(game.Name);
+                    match = filtered.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
+                }
+                
+                if (match == null)
+                {
+                    match = filtered.First();
+                }
+            }
+
+            // Fallback to any match
+            if (match == null)
+            {
+                string normalizedGame = NormalizeGameName(game.Name);
+                match = searchResults.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
+            }
+            
+            if (match == null)
+            {
+                match = searchResults.First();
+            }
+
+            return match;
+        }
 
         private static bool IsNintendoOrSwitchPlatform(SearchResult result)
         {

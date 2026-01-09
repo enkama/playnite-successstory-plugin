@@ -100,13 +100,22 @@ namespace SuccessStory.Clients
             {
                 gameAchievements.Items = AllAchievements;
             }
-            else
+            else // AllAchievements.Count == 0
             {
-                Logger.Warn($"Xbox: No achievements found for {game.Name}, restoring cached data if available");
-                var existing = SuccessStory.PluginDatabase.Get(game.Id, true);
-                if (existing != null)
+                // Check if we have cached data - if so, this might indicate data loss
+                var cachedData = SuccessStory.PluginDatabase.Get(game.Id, true);
+                bool hadCachedAchievements = cachedData?.Items?.Count > 0;
+                
+                if (hadCachedAchievements)
                 {
-                    gameAchievements.Items = existing.Items;
+                    // Warn: we had data before but now it's empty (possible data loss)
+                    Logger.Warn($"Xbox: No achievements found for {game.Name}, but cached data exists. Restoring from cache.");
+                    gameAchievements.Items = cachedData.Items;
+                }
+                else
+                {
+                    // Info: legitimately no achievements for this title
+                    Logger.Info($"Xbox: No achievements found for {game.Name} (title may not have achievements)");
                 }
             }
 
@@ -330,18 +339,11 @@ namespace SuccessStory.Clients
                 GetXboxOneAchievements
             };
 
-            // Only add Xbox360 retrieval when enabled in settings to avoid unnecessary Xenia lookups/crashes
-            try
+            // Conditionally add Xbox360 support if enabled
+            if (PluginDatabase?.PluginSettings?.Settings?.EnableXbox360Achievements == true)
             {
-                if (PluginDatabase?.PluginSettings?.Settings?.EnableXbox360Achievements == true)
-                {
-                    getAchievementMethods.Add(GetXbox360Achievements);
-                }
-            }
-            catch (Exception ex)
-            {
-                // Defensive: log and proceed with Xbox One method only
-                Logger.Warn($"XboxAchievements: failed to evaluate Xbox360 setting - {ex.Message}");
+                getAchievementMethods.Add(GetXbox360Achievements);
+                Logger.Warn("Xbox360 achievements enabled - adding to fetch methods");
             }
 
             if (game.Platforms != null && game.Platforms.Any(p => p.SpecificationId == "xbox360") && getAchievementMethods.Contains(GetXbox360Achievements))
@@ -550,6 +552,15 @@ namespace SuccessStory.Clients
                 catch (Exception ex)
                 {
                     Common.LogError(ex, false, "Failed to dispose HttpClient");
+                }
+                
+                try
+                {
+                    _titleIdCache?.Clear();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Failed to clear title ID cache");
                 }
             }
         }

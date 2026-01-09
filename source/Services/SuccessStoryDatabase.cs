@@ -26,38 +26,37 @@ namespace SuccessStory.Services
     {
         public SuccessStory Plugin { get; set; }
 
-        private static readonly ConcurrentDictionary<AchievementSource, Lazy<GenericAchievements>> achievementProviders = new ConcurrentDictionary<AchievementSource, Lazy<GenericAchievements>>();
-        internal static Dictionary<AchievementSource, GenericAchievements> AchievementProviders
+        private static readonly Lazy<Dictionary<AchievementSource, GenericAchievements>> achievementProviders = new Lazy<Dictionary<AchievementSource, GenericAchievements>>(() =>
         {
-            get
+            var providers = new Dictionary<AchievementSource, Lazy<GenericAchievements>>
             {
-                if (achievementProviders.IsEmpty)
-                {
-                    achievementProviders.TryAdd(AchievementSource.GOG, new Lazy<GenericAchievements>(() => new GogAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Epic, new Lazy<GenericAchievements>(() => new EpicAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.EA, new Lazy<GenericAchievements>(() => new EaAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Overwatch, new Lazy<GenericAchievements>(() => new OverwatchAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Wow, new Lazy<GenericAchievements>(() => new WowAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Playstation, new Lazy<GenericAchievements>(() => new PSNAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.RetroAchievements, new Lazy<GenericAchievements>(() => new RetroAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.RPCS3, new Lazy<GenericAchievements>(() => new Rpcs3Achievements()));
-                    achievementProviders.TryAdd(AchievementSource.ShadPS4, new Lazy<GenericAchievements>(() => new ShadPS4Achievements()));
-                    achievementProviders.TryAdd(AchievementSource.Xbox360, new Lazy<GenericAchievements>(() => new Xbox360Achievements()));
-                    achievementProviders.TryAdd(AchievementSource.Starcraft2, new Lazy<GenericAchievements>(() => new Starcraft2Achievements()));
-                    achievementProviders.TryAdd(AchievementSource.Steam, new Lazy<GenericAchievements>(() => new SteamAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Xbox, new Lazy<GenericAchievements>(() => new XboxAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.GenshinImpact, new Lazy<GenericAchievements>(() => new GenshinImpactAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.WutheringWaves, new Lazy<GenericAchievements>(() => new WutheringWavesAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.HonkaiStarRail, new Lazy<GenericAchievements>(() => new HonkaiStarRailAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.ZenlessZoneZero, new Lazy<GenericAchievements>(() => new ZenlessZoneZeroAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.GuildWars2, new Lazy<GenericAchievements>(() => new GuildWars2Achievements()));
-                    achievementProviders.TryAdd(AchievementSource.GameJolt, new Lazy<GenericAchievements>(() => new GameJoltAchievements()));
-                    achievementProviders.TryAdd(AchievementSource.Local, new Lazy<GenericAchievements>(() => SteamAchievements.GetLocalSteamAchievementsProvider()));
-                }
+                { AchievementSource.GOG, new Lazy<GenericAchievements>(() => new GogAchievements()) },
+                { AchievementSource.Epic, new Lazy<GenericAchievements>(() => new EpicAchievements()) },
+                { AchievementSource.EA, new Lazy<GenericAchievements>(() => new EaAchievements()) },
+                { AchievementSource.Overwatch, new Lazy<GenericAchievements>(() => new OverwatchAchievements()) },
+                { AchievementSource.Wow, new Lazy<GenericAchievements>(() => new WowAchievements()) },
+                { AchievementSource.Playstation, new Lazy<GenericAchievements>(() => new PSNAchievements()) },
+                { AchievementSource.RetroAchievements, new Lazy<GenericAchievements>(() => new RetroAchievements()) },
+                { AchievementSource.RPCS3, new Lazy<GenericAchievements>(() => new Rpcs3Achievements()) },
+                { AchievementSource.ShadPS4, new Lazy<GenericAchievements>(() => new ShadPS4Achievements()) },
+                { AchievementSource.Xbox360, new Lazy<GenericAchievements>(() => new Xbox360Achievements()) },
+                { AchievementSource.Starcraft2, new Lazy<GenericAchievements>(() => new Starcraft2Achievements()) },
+                { AchievementSource.Steam, new Lazy<GenericAchievements>(() => new SteamAchievements()) },
+                { AchievementSource.Xbox, new Lazy<GenericAchievements>(() => new XboxAchievements()) },
+                { AchievementSource.GenshinImpact, new Lazy<GenericAchievements>(() => new GenshinImpactAchievements()) },
+                { AchievementSource.WutheringWaves, new Lazy<GenericAchievements>(() => new WutheringWavesAchievements()) },
+                { AchievementSource.HonkaiStarRail, new Lazy<GenericAchievements>(() => new HonkaiStarRailAchievements()) },
+                { AchievementSource.ZenlessZoneZero, new Lazy<GenericAchievements>(() => new ZenlessZoneZeroAchievements()) },
+                { AchievementSource.GuildWars2, new Lazy<GenericAchievements>(() => new GuildWars2Achievements()) },
+                { AchievementSource.GameJolt, new Lazy<GenericAchievements>(() => new GameJoltAchievements()) },
+                { AchievementSource.Local, new Lazy<GenericAchievements>(() => SteamAchievements.GetLocalSteamAchievementsProvider()) }
+            };
+            
+            // Materialize all providers once and cache
+            return providers.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Value);
+        });
 
-                return achievementProviders.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Value);
-            }
-        }
+        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
 
         public SuccessStoryDatabase(SuccessStorySettingsViewModel pluginSettings, string pluginUserDataPath) : base(pluginSettings, "SuccessStory", pluginUserDataPath)
         {
@@ -502,13 +501,13 @@ namespace SuccessStory.Services
 
         /// <summary>
         /// Synchronous wrapper for SetEstimateTimeToUnlockAsync.
-        /// WARNING: This method uses .GetAwaiter().GetResult() which can deadlock on UI synchronization contexts.
-        /// DO NOT call this from UI threads. Prefer calling SetEstimateTimeToUnlockAsync directly and awaiting it.
-        /// This wrapper exists only for backward compatibility with synchronous callers.
+        /// WARNING: Uses Task.Run to avoid deadlock on UI threads.
+        /// Prefer calling SetEstimateTimeToUnlockAsync directly when possible.
         /// </summary>
         private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements)
         {
-            return SetEstimateTimeToUnlockAsync(game, gameAchievements).GetAwaiter().GetResult();
+            // Use Task.Run to offload to thread pool and avoid capturing sync context
+            return Task.Run(() => SetEstimateTimeToUnlockAsync(game, gameAchievements)).GetAwaiter().GetResult();
         }
 
         public enum AchievementSource
@@ -1007,13 +1006,12 @@ namespace SuccessStory.Services
                                     return;
                                 }
 
-                                // Update progress text (best-effort) - marshal to UI thread
-                                API.Instance.MainView.UIDispatcher.Invoke(() =>
+                                // Update progress text (non-blocking)
+                                API.Instance.MainView.UIDispatcher.BeginInvoke((Action)(() =>
                                 {
-                                    a.Text = PluginName + " - " + ResourceProvider.GetString("LOCCommonProcessing")
-                                        + "\n\n" + $"{a.CurrentProgressValue}/{a.ProgressMaxValue}"
+                                    a.ProgressBarText = ResourceProvider.GetString("LOCSuccessStoryGettingAchievements")
                                         + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
-                                });
+                                }));
 
                                 if (a.CancelToken.IsCancellationRequested)
                                 {
