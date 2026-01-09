@@ -563,7 +563,7 @@ namespace SuccessStory.Clients
         {
             // Use Interlocked for thread-safe disposal check
             if (Interlocked.CompareExchange(ref _disposed, 1, 0) == 0)
-                
+            {
                 try
                 {
                     _isConnectedSemaphore?.Dispose();

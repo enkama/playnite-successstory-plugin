@@ -19,7 +19,11 @@ namespace SuccessStory.Clients
 
         public GogAchievements() : base("GOG", CodeLang.GetGogLang(API.Instance.ApplicationSettings.Language))
         {
-            GogApi.SetLanguage(API.Instance.ApplicationSettings.Language);
+            // Null-safety: GogApi may not be initialized yet if called early in plugin lifecycle
+            if (SuccessStory.GogApi != null)
+            {
+                SuccessStory.GogApi.SetLanguage(API.Instance.ApplicationSettings.Language);
+            }
         }
 
 

@@ -25,7 +25,11 @@ namespace SuccessStory.Clients
 
         public EaAchievements() : base("EA", CodeLang.GetEaLang(API.Instance.ApplicationSettings.Language), CodeLang.GetCountryFromLast(API.Instance.ApplicationSettings.Language))
         {
-            EaApi.SetLanguage(API.Instance.ApplicationSettings.Language);
+            // Null-safety: EaApi may not be initialized yet if called early in plugin lifecycle
+            if (EaApi != null)
+            {
+                EaApi.SetLanguage(API.Instance.ApplicationSettings.Language);
+            }
         }
 
 
@@ -42,6 +46,11 @@ namespace SuccessStory.Clients
 
                     if (originAchievements?.Count > 0)
                     {
+                        if (originAchievements?.Items != null)
+                        {
+                            originAchievements.Items = originAchievements.Items.Where(x => x.DateUnlocked != default(DateTime)).ToList();
+                        }
+
                         AllAchievements = originAchievements.Select(x => new Achievement
                         {
                             ApiName = x.Id,
@@ -49,7 +58,7 @@ namespace SuccessStory.Clients
                             Description = x.Description,
                             UrlUnlocked = x.UrlUnlocked,
                             UrlLocked = x.UrlLocked,
-                            DateUnlocked = x.DateUnlocked.ToString().Contains(default(DateTime).ToString()) ? (DateTime?)null : x.DateUnlocked,
+                            DateUnlocked = x.DateUnlocked == default(DateTime) ? (DateTime?)null : x.DateUnlocked,
                             Percent = x.Percent,
                             GamerScore = x.GamerScore
                         }).ToList();
@@ -280,22 +289,45 @@ namespace SuccessStory.Clients
 
             if (gameAchievements.Items == null) return;
 
+            // Pre-compute word sets for all images once (outside the achievement loop)
+            var imageWordSets = imagesNormalized.ToDictionary(
+                kv => kv.Key,
+                kv => kv.Key.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => w.Length > 2).ToHashSet()
+            );
+
             foreach (var ach in gameAchievements.Items)
             {
-                string achNorm = Normalize(ach.Name);
                 bool assigned = false;
+                string achNorm = Normalize(ach.Name);
 
-                if (!achNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(achNorm, out string imgUrl))
+                // Try exact match
+                if (imagesNormalized.TryGetValue(achNorm, out string exactUrl))
                 {
-                    ach.UrlUnlocked = imgUrl;
-                    ach.UrlLocked = imgUrl;
+                    ach.UrlUnlocked = exactUrl;
+                    ach.UrlLocked = exactUrl;
                     assigned = true;
+                }
+
+                // Try Contains match (with minimum length to avoid false positives like "go" matching "dragon")
+                if (!assigned && achNorm.Length >= 4)
+                {
+                    foreach (var kv in imagesNormalized)
+                    {
+                        if (kv.Key.Contains(achNorm))
+                        {
+                            ach.UrlUnlocked = kv.Value;
+                            ach.UrlLocked = kv.Value;
+                            assigned = true;
+                            break;
+                        }
+                    }
                 }
 
                 if (!assigned)
                 {
                     string apiNorm = Normalize(ach.ApiName);
-                    if (!apiNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(apiNorm, out imgUrl))
+                    if (!apiNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(apiNorm, out string imgUrl))
                     {
                         ach.UrlUnlocked = imgUrl;
                         ach.UrlLocked = imgUrl;
@@ -315,23 +347,16 @@ namespace SuccessStory.Clients
                     }
                 }
 
-                // Word overlap matching - pre-compute word tokens for images
+                // Word overlap matching - use pre-computed word sets
                 if (!assigned && !ach.Name.IsNullOrEmpty())
                 {
-                    string achNorm = ach.Name.RemoveDiacritics().Trim().ToLowerInvariant();
-                    achNorm = Regex.Replace(achNorm, @"[^a-z0-9\s]", "");
-                    var achWords = achNorm.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                    string achNormForWords = ach.Name.RemoveDiacritics().Trim().ToLowerInvariant();
+                    achNormForWords = Regex.Replace(achNormForWords, @"[^a-z0-9\s]", "");
+                    var achWords = achNormForWords.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
                         .Where(w => w.Length > 2).ToList();
 
                     if (achWords.Count > 0)
                     {
-                        // Pre-compute word sets for images (done once per achievement set)
-                        var imageWordSets = imagesNormalized.ToDictionary(
-                            kv => kv.Key,
-                            kv => kv.Key.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Where(w => w.Length > 2).ToHashSet()
-                        );
-
                         foreach (var kv in imageWordSets)
                         {
                             int overlap = achWords.Count(w => kv.Value.Contains(w));
@@ -350,6 +375,11 @@ namespace SuccessStory.Clients
 
         private static SearchResult FindBestExophaseMatch(List<SearchResult> searchResults, Game game)
         {
+            if (searchResults == null || searchResults.Count == 0)
+            {
+                return null;
+            }
+
             // Try exact EA platform match
             var match = searchResults.FirstOrDefault(x => 
                 x.Platforms != null && 
@@ -383,7 +413,7 @@ namespace SuccessStory.Clients
                     match = filtered.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
                 }
                 
-                if (match == null)
+                if (match == null && filtered.Count > 0)
                 {
                     match = filtered.First();
                 }
@@ -396,7 +426,7 @@ namespace SuccessStory.Clients
                 match = searchResults.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
             }
             
-            if (match == null)
+            if (match == null && searchResults.Count > 0)
             {
                 match = searchResults.First();
             }
