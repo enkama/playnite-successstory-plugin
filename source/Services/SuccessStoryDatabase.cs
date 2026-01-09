@@ -477,15 +477,7 @@ namespace SuccessStory.Services
                             }
                         }, cts.Token);
 
-                        try
-                        {
-                            await searchTask;
-                        }
-                        catch (OperationCanceledException)
-                        {
-                            Logger.Warn($"SetEstimateTimeToUnlock timed out for {game.Name}");
-                            return gameAchievements;
-                        }
+                        await searchTask.ConfigureAwait(false);
 
                         if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
                         {

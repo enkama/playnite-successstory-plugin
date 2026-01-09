@@ -10,7 +10,6 @@ using System.Collections.ObjectModel;
 using CommonPluginsStores.Models;
 using System.Linq;
 using Playnite.SDK;
-using System.Threading.Tasks;
 using CommonPluginsShared.Extensions;
 using System.Text.RegularExpressions;
 
@@ -197,7 +196,7 @@ namespace SuccessStory.Clients
                         SearchResult exMatch = exSearch.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
                         if (exMatch == null) exMatch = exSearch.FirstOrDefault(s => PrefersPc(s));
 
-                        var exSearchFiltered = exSearch.Where(x => !((x.Name ?? string.Empty).IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 || (x.Name ?? string.Empty).IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0 || (x.Platforms != null && x.Platforms.Any(p => p.IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 || p.IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0)))).ToList();
+                        var exSearchFiltered = exSearch.Where(x => !IsNintendoOrSwitchPlatform(x)).ToList();
                         if (exSearchFiltered.Count > 0)
                         {
                             if (exMatch == null) exMatch = exSearchFiltered.FirstOrDefault(x => x.Platforms != null && x.Platforms.Any(p => p.Equals("Electronic Arts", StringComparison.InvariantCultureIgnoreCase)));
@@ -358,6 +357,27 @@ namespace SuccessStory.Clients
             }
         }
 
+
+        private static bool IsNintendoOrSwitchPlatform(SearchResult result)
+        {
+            if (result == null) return false;
+            
+            string name = result.Name ?? string.Empty;
+            if (name.IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 ||
+                name.IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0)
+            {
+                return true;
+            }
+            
+            if (result.Platforms != null)
+            {
+                return result.Platforms.Any(p => 
+                    p.IndexOf("switch", StringComparison.InvariantCultureIgnoreCase) >= 0 ||
+                    p.IndexOf("nintendo", StringComparison.InvariantCultureIgnoreCase) >= 0);
+            }
+            
+            return false;
+        }
 
         private static bool PrefersPc(SearchResult s)
         {

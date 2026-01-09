@@ -533,14 +533,37 @@ namespace SuccessStory.Clients
             if (!_disposed)
             {
                 _disposed = true;
-                _isConnectedSemaphore?.Dispose();
+                
+                try
+                {
+                    _isConnectedSemaphore?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Failed to dispose semaphore");
+                }
+                
+                try
+                {
+                    _sharedHttpClient?.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Failed to dispose HttpClient");
+                }
             }
         }
 
+        /// <summary>
+        /// Instance dispose method. This is empty because all resources are static.
+        /// Call the static Cleanup() method when the plugin unloads to release resources.
+        /// This interface implementation exists for compatibility with disposal patterns.
+        /// </summary>
         public void Dispose()
         {
-            // Instance dispose - static cleanup should be called separately via Cleanup()
-            // This is here to satisfy IDisposable interface
+            // All resources are static (_sharedHttpClient, _isConnectedSemaphore)
+            // They must be disposed via the static Cleanup() method, not per-instance
+            // This is intentional for the plugin lifecycle where resources are shared
         }
 
         #endregion
