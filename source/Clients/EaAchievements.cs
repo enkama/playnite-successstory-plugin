@@ -175,8 +175,9 @@ namespace SuccessStory.Clients
             Dictionary<string, string> images = new Dictionary<string, string>();
 
             // 0) Try to get images from the resolver cache first
-            if (Services.AchievementImageResolver.TryGetImages(game, out images) && images?.Count > 0)
+            if (Services.AchievementImageResolver.TryGetImages(game, out var resolverImages) && resolverImages?.Count > 0)
             {
+                images = resolverImages;
                 Logger.Info($"Found {images.Count} images in resolver cache for {game.Name}");
                 return images;
             }
@@ -246,11 +247,18 @@ namespace SuccessStory.Clients
             // 2) If still no images, try TrueAchievements - Xbox origin
             if (images.Count == 0)
             {
-                var taGames = TrueAchievements.SearchGame(game, TrueAchievements.OriginData.Xbox);
-                if (taGames.Count > 0)
+                try
                 {
-                    var match = taGames.First();
-                    if (!match.GameUrl.IsNullOrEmpty()) images = TrueAchievements.GetDataImages(match.GameUrl);
+                    var taGames = TrueAchievements.SearchGame(game, TrueAchievements.OriginData.Xbox);
+                    if (taGames.Count > 0)
+                    {
+                        var match = taGames.First();
+                        if (!match.GameUrl.IsNullOrEmpty()) images = TrueAchievements.GetDataImages(match.GameUrl);
+                    }
+                }
+                catch (Exception exTaXbox)
+                {
+                    Common.LogError(exTaXbox, false, "Error while searching TrueAchievements Xbox for EA images", true, PluginDatabase.PluginName);
                 }
             }
 

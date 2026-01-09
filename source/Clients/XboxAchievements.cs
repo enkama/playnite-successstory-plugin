@@ -23,9 +23,10 @@ namespace SuccessStory.Clients
 {
     public class XboxAchievements : GenericAchievements
     {
-        private readonly object _initLock = new object();
+        private static readonly object _initLock = new object();
         private static readonly SemaphoreSlim _isConnectedSemaphore = new SemaphoreSlim(1, 1);
         private static readonly ConcurrentDictionary<string, string> _titleIdCache = new ConcurrentDictionary<string, string>();
+        private static readonly HttpClient _sharedHttpClient = new HttpClient();
         protected static readonly Lazy<XboxAccountClient> xboxAccountClient = new Lazy<XboxAccountClient>(() => new XboxAccountClient(API.Instance, PluginDatabase.Paths.PluginUserDataPath + "\\..\\" + PlayniteTools.GetPluginId(ExternalPlugin.XboxLibrary)));
         internal static XboxAccountClient XboxAccountClient => xboxAccountClient.Value;
 
@@ -172,7 +173,8 @@ namespace SuccessStory.Clients
 
         public override bool IsConnected()
         {
-            if (CachedIsConnectedResult == null)
+            // Use Volatile.Read for proper memory barrier
+            if (Volatile.Read(ref CachedIsConnectedResult) == null)
             {
                 // Sync-over-async: We run the full async flow on a background thread to avoid deadlocks.
                 // Note: Calling .GetAwaiter().GetResult() from a thread with a synchronization context (like the UI thread)
@@ -196,8 +198,8 @@ namespace SuccessStory.Clients
                 await _isConnectedSemaphore.WaitAsync();
                 try
                 {
-                    // Double-check after acquiring lock
-                    if (CachedIsConnectedResult == null)
+                    // Double-check after acquiring lock with Volatile.Read
+                    if (Volatile.Read(ref CachedIsConnectedResult) == null)
                     {
                         bool isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
                         if (!isAuthenticated && File.Exists(XboxAccountClient.liveTokensPath))
@@ -211,7 +213,8 @@ namespace SuccessStory.Clients
                             Logger.Warn($"{ClientName} user is not authenticated");
                         }
 
-                        CachedIsConnectedResult = isAuthenticated;
+                        // Use Volatile.Write for proper memory barrier
+                        Volatile.Write(ref CachedIsConnectedResult, isAuthenticated);
                     }
                 }
                 finally
@@ -279,42 +282,41 @@ namespace SuccessStory.Clients
         {
             Common.LogDebug(true, $"{ClientName} - url: {url}");
 
-            using (HttpClient client = new HttpClient())
+            // Use shared HttpClient to prevent socket exhaustion
+            _sharedHttpClient.DefaultRequestHeaders.Clear();
+            _sharedHttpClient.DefaultRequestHeaders.Add("User-Agent", Web.UserAgent);
+            SetAuthenticationHeaders(_sharedHttpClient.DefaultRequestHeaders, authData, contractVersion);
+
+            using (HttpResponseMessage response = await _sharedHttpClient.GetAsync(url))
             {
-                client.DefaultRequestHeaders.Add("User-Agent", Web.UserAgent);
-                SetAuthenticationHeaders(client.DefaultRequestHeaders, authData, contractVersion);
-
-                using (HttpResponseMessage response = await client.GetAsync(url))
+                if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
-                    if (response.StatusCode != System.Net.HttpStatusCode.OK)
+                    if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
                     {
-                        if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                        {
-                            Logger.Warn($"{ClientName} - User is not authenticated - {response.StatusCode}");
-                            API.Instance.Notifications.Add(new NotificationMessage(
-                                $"{PluginDatabase.PluginName}-Xbox-notAuthenticate",
-                                $"{PluginDatabase.PluginName}\r\n{ResourceProvider.GetString("LOCSuccessStoryNotificationsXboxNotAuthenticate")}",
-                                NotificationType.Error
-                            ));
-                        }
-                        else
-                        {
-                            Logger.Warn($"{ClientName} - Error on GetXboxAchievements() - {response.StatusCode}");
-                            API.Instance.Notifications.Add(new NotificationMessage(
-                                $"{PluginDatabase.PluginName}-Xbox-webError",
-                                $"{PluginDatabase.PluginName}\r\nXbox achievements: {ResourceProvider.GetString("LOCImportError")}",
-                                NotificationType.Error
-                            ));
-                        }
-
-                        return null;
+                        Logger.Warn($"{ClientName} - User is not authenticated - {response.StatusCode}");
+                        API.Instance.Notifications.Add(new NotificationMessage(
+                            $"{PluginDatabase.PluginName}-Xbox-notAuthenticate",
+                            $"{PluginDatabase.PluginName}\r\n{ResourceProvider.GetString("LOCSuccessStoryNotificationsXboxNotAuthenticate")}",
+                            NotificationType.Error
+                        ));
+                    }
+                    else
+                    {
+                        Logger.Warn($"{ClientName} - Error on GetXboxAchievements() - {response.StatusCode}");
+                        API.Instance.Notifications.Add(new NotificationMessage(
+                            $"{PluginDatabase.PluginName}-Xbox-webError",
+                            $"{PluginDatabase.PluginName}\r\nXbox achievements: {ResourceProvider.GetString("LOCImportError")}",
+                            NotificationType.Error
+                        ));
                     }
 
-                    string cont = await response.Content.ReadAsStringAsync();
-                    Common.LogDebug(true, cont);
-
-                    return Serialization.FromJson<TContent>(cont);
+                    return null;
                 }
+
+                string cont = await response.Content.ReadAsStringAsync();
+                Common.LogDebug(true, cont);
+
+                return Serialization.FromJson<TContent>(cont);
             }
         }
 

@@ -946,7 +946,8 @@ namespace SuccessStory.Services
 
                 // Use bounded concurrency to refresh multiple games in parallel while limiting resource usage.
                 int maxConcurrency = 4; // tuning: reduce/increase as needed
-                using (var concurrency = new System.Threading.SemaphoreSlim(maxConcurrency))
+                var concurrency = new System.Threading.SemaphoreSlim(maxConcurrency);
+                try
                 {
                     var tasks = new List<Task>();
                     int progressCounter = 0;
@@ -976,11 +977,25 @@ namespace SuccessStory.Services
                         {
                             try
                             {
-                                Game game = API.Instance.Database.Games.Get(gameId);
-                                // Update progress text (best-effort)
-                                a.Text = PluginName + " - " + ResourceProvider.GetString("LOCCommonProcessing")
-                                    + "\n\n" + $"{a.CurrentProgressValue}/{a.ProgressMaxValue}"
-                                    + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
+                                // Marshal UI/DB access through main dispatcher
+                                Game game = null;
+                                API.Instance.MainView.UIDispatcher.Invoke(() =>
+                                {
+                                    game = API.Instance.Database.Games.Get(gameId);
+                                });
+
+                                if (game == null)
+                                {
+                                    return;
+                                }
+
+                                // Update progress text (best-effort) - marshal to UI thread
+                                API.Instance.MainView.UIDispatcher.Invoke(() =>
+                                {
+                                    a.Text = PluginName + " - " + ResourceProvider.GetString("LOCCommonProcessing")
+                                        + "\n\n" + $"{a.CurrentProgressValue}/{a.ProgressMaxValue}"
+                                        + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
+                                });
 
                                 if (a.CancelToken.IsCancellationRequested)
                                 {
@@ -1008,7 +1023,11 @@ namespace SuccessStory.Services
                             finally
                             {
                                 int progress = System.Threading.Interlocked.Increment(ref progressCounter);
-                                a.CurrentProgressValue = progress;
+                                // Marshal progress update to UI thread
+                                API.Instance.MainView.UIDispatcher.Invoke(() =>
+                                {
+                                    a.CurrentProgressValue = progress;
+                                });
                                 concurrency.Release();
                             }
                         }, a.CancelToken);
@@ -1016,21 +1035,28 @@ namespace SuccessStory.Services
                         tasks.Add(task);
                     }
 
+                    // Wait for all scheduled tasks to complete WITHOUT cancellation token
+                    // to ensure all tasks finish before we dispose semaphore and end buffer updates
                     try
                     {
-                        // Wait for all scheduled tasks to complete, respecting cancellation
-                        Task.WhenAll(tasks).Wait(a.CancelToken);
+                        Task.WhenAll(tasks).Wait();
                     }
-                    catch (OperationCanceledException)
+                    catch (AggregateException)
                     {
-                        // cancelled by user; tasks may be still running but will observe cancellation token
+                        // Tasks may have thrown exceptions, but we still need to clean up properly
                     }
+                }
+                finally
+                {
+                    // Dispose semaphore only after all tasks have completed
+                    concurrency.Dispose();
                 }
 
                 stopWatch.Stop();
                 TimeSpan ts = stopWatch.Elapsed;
                 Logger.Info($"Task Refresh(){(a.CancelToken.IsCancellationRequested ? " canceled" : string.Empty)} - {string.Format("{0:00}:{1:00}.{2:00}", ts.Minutes, ts.Seconds, ts.Milliseconds / 10)} for {a.CurrentProgressValue}/{ids.Count()} items");
 
+                // End buffer updates only after all tasks have completed
                 Database.EndBufferUpdate();
                 API.Instance.Database.EndBufferUpdate();
             }, options);

@@ -57,6 +57,16 @@ namespace SuccessStory.Clients
         };
 
 
+        private static readonly HttpClient _sharedHttpClient = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(15)
+        };
+
+        static ExophaseAchievements()
+        {
+            _sharedHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
+        }
+
         public ExophaseAchievements() : base("Exophase")
         {
             CookiesDomains = new List<string> { ".exophase.com" };
@@ -161,23 +171,17 @@ namespace SuccessStory.Clients
 
                         // Fallback: try HTTP client then simple download
                         string fetched = null;
-                        using (var httpClient = new HttpClient())
+                        try
                         {
-                            httpClient.Timeout = TimeSpan.FromSeconds(15);
-                            httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");
-
-                            try
+                            var resp = await _sharedHttpClient.GetAsync(fetchUrl);
+                            if (resp.IsSuccessStatusCode)
                             {
-                                var resp = await httpClient.GetAsync(fetchUrl);
-                                if (resp.IsSuccessStatusCode)
-                                {
-                                    fetched = await resp.Content.ReadAsStringAsync();
-                                }
+                                fetched = await resp.Content.ReadAsStringAsync();
                             }
-                            catch (Exception ex)
-                            {
-                                Logger.Debug($"Exophase HTTP client fetch failed: {ex.Message}");
-                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Debug($"Exophase HTTP client fetch failed: {ex.Message}");
                         }
 
                         if (!string.IsNullOrEmpty(fetched))

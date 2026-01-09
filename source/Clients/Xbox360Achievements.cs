@@ -71,21 +71,33 @@ namespace SuccessStory.Clients
 
                 try
                 {
-                    // Read configured Xenia path from plugin settings if available
-                    try
+                    // Prefer explicit ctor-provided _xeniaPath over settings
+                    if (string.IsNullOrEmpty(_xeniaPath))
                     {
-                        var settings = SuccessStory.PluginDatabase?.PluginSettings?.Settings;
-                        _xeniaPath = settings?.XeniaInstallationFolder ?? _xeniaPath;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.Error(ex, "Error accessing SuccessStory settings in Xbox360Achievements.EnsureInitialized");
+                        // Only fallback to settings if no explicit path was provided
+                        try
+                        {
+                            var settings = SuccessStory.PluginDatabase?.PluginSettings?.Settings;
+                            _xeniaPath = settings?.XeniaInstallationFolder;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Error(ex, "Error accessing SuccessStory settings in Xbox360Achievements.EnsureInitialized");
+                        }
                     }
 
-                    // Fallbacks or defaults can be handled in InitializePaths implementation
-                    InitializePaths();
-                    _isInitialized = true;
-                    _logger.Debug($"Xbox360Achievements initialized. XeniaPath='{_xeniaPath}'");
+                    // InitializePaths now returns bool for success/failure
+                    bool success = InitializePaths();
+                    if (success)
+                    {
+                        _isInitialized = true;
+                        _logger.Debug($"Xbox360Achievements initialized. XeniaPath='{_xeniaPath}'");
+                    }
+                    else
+                    {
+                        _logger.Warn("Xbox360Achievements InitializePaths failed");
+                        _isInitialized = false;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -95,21 +107,46 @@ namespace SuccessStory.Clients
             }
         }
 
-        private void InitializePaths()
+        private bool InitializePaths()
         {
             if (string.IsNullOrEmpty(_xeniaPath))
             {
                 _logger.Warn("Xbox360: Xenia path is null or empty");
-                return;
+                return false;
             }
 
-            string xeniaDir = Path.GetDirectoryName(_xeniaPath);
-            _xeniaLogFilePath = Path.Combine(xeniaDir, "xenia.log");
-            _xeniaAchievementsDir = Path.Combine(xeniaDir, "Achievements".TrimEnd('\\') + '\\');
-            _successStoryDataDir = Directory.Exists(Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory"))
-                ? Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\')
-                : Path.Combine(_playniteApi.Paths.ApplicationPath, "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\');
-            _xeniaJsonTempDir = _xeniaAchievementsDir;
+            try
+            {
+                string xeniaDir = Path.GetDirectoryName(_xeniaPath);
+                if (string.IsNullOrEmpty(xeniaDir))
+                {
+                    _logger.Warn("Xbox360: Could not determine Xenia directory from path");
+                    return false;
+                }
+
+                _xeniaLogFilePath = Path.Combine(xeniaDir, "xenia.log");
+                _xeniaAchievementsDir = Path.Combine(xeniaDir, "Achievements".TrimEnd('\\') + '\\');
+                
+                _successStoryDataDir = Directory.Exists(Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory"))
+                    ? Path.Combine(_playniteAppData, "Playnite", "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\')
+                    : Path.Combine(_playniteApi.Paths.ApplicationPath, "ExtensionsData", SUCCESS_STORY_GUID, "SuccessStory".TrimEnd('\\') + '\\');
+                
+                _xeniaJsonTempDir = _xeniaAchievementsDir;
+
+                // Validate required directories are set
+                if (string.IsNullOrEmpty(_successStoryDataDir) || string.IsNullOrEmpty(_xeniaAchievementsDir))
+                {
+                    _logger.Warn("Xbox360: Required directories could not be initialized");
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error(ex, "Xbox360: Error in InitializePaths");
+                return false;
+            }
         }
 
         public override GameAchievements GetAchievements(Game game)
@@ -413,7 +450,8 @@ namespace SuccessStory.Clients
         public override bool IsConfigured()
         {
             EnsureInitialized();
-            return !string.IsNullOrEmpty(_xeniaPath) && (System.IO.Directory.Exists(_xeniaPath) || System.IO.File.Exists(_xeniaPath));
+            // _xeniaPath is now normalized to a directory, so only check Directory.Exists
+            return !string.IsNullOrEmpty(_xeniaPath) && System.IO.Directory.Exists(_xeniaPath);
         }
 
         public override bool EnabledInSettings()

@@ -61,7 +61,7 @@ namespace SuccessStory.Clients
                 Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(url).GetAwaiter().GetResult();
                 sw.Stop();
-                Logger.Info($"SearchGame web request took {sw.ElapsedMilliseconds}ms for {url}");
+                Logger.Debug($"SearchGame web request took {sw.ElapsedMilliseconds}ms for {url}");
 
                 string response = sourceData.Item1;
 
@@ -154,7 +154,7 @@ namespace SuccessStory.Clients
                 Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(urlTrueAchievement).GetAwaiter().GetResult();
                 sw.Stop();
-                Logger.Info($"GetEstimateTimeToUnlock web request took {sw.ElapsedMilliseconds}ms for {urlTrueAchievement}");
+                Logger.Debug($"GetEstimateTimeToUnlock web request took {sw.ElapsedMilliseconds}ms for {urlTrueAchievement}");
 
                 string response = sourceData.Item1;
 
@@ -361,6 +361,33 @@ namespace SuccessStory.Clients
                             {
                                 Logger.Debug($"GetDataImages: Failed to extract filename from URL: {ex.Message}");
                             }
+                            
+                            // Additional fallback: try safer extraction
+                            if (string.IsNullOrEmpty(name))
+                            {
+                                try
+                                {
+                                    if (Uri.TryCreate(imgUrl, UriKind.Absolute, out var uri))
+                                    {
+                                        name = Path.GetFileNameWithoutExtension(uri.LocalPath);
+                                    }
+                                    else
+                                    {
+                                        name = Path.GetFileNameWithoutExtension(imgUrl);
+                                    }
+                                }
+                                catch
+                                {
+                                    // Final fallback: use deterministic default
+                                    name = $"image_{index}";
+                                }
+                            }
+                        }
+
+                        // Ensure name is never null before normalization
+                        if (string.IsNullOrEmpty(name))
+                        {
+                            name = $"image_{index}";
                         }
 
                         // Normalize whitespace
