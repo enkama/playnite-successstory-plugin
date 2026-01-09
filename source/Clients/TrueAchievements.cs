@@ -7,6 +7,7 @@ using Playnite.SDK;
 using Playnite.SDK.Models;
 using SuccessStory.Services;
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -23,6 +24,9 @@ namespace SuccessStory.Clients
 
         private static string XboxUrlSearch => @"https://www.trueachievements.com/searchresults.aspx?search={0}";
         private static string SteamUrlSearch => @"https://truesteamachievements.com/searchresults.aspx?search={0}";
+
+        private const int MaxImagesPerPage = 500;
+        private const int MaxImageNameLength = 120;
 
         public enum OriginData { Steam, Xbox }
 
@@ -308,7 +312,7 @@ namespace SuccessStory.Clients
                 foreach (var img in imgElements)
                 {
                     // Cap processed images to avoid performance issues on huge pages
-                    if (index >= 500) break;
+                    if (index >= MaxImagesPerPage) break;
 
                     try
                     {
@@ -348,7 +352,7 @@ namespace SuccessStory.Clients
                             {
                                 // take first line and limit length
                                 txt = txt.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
-                                if (!string.IsNullOrEmpty(txt)) name = txt.Length > 120 ? txt.Substring(0, 120) : txt;
+                                if (!string.IsNullOrEmpty(txt)) name = txt.Length > MaxImageNameLength ? txt.Substring(0, MaxImageNameLength) : txt;
                             }
                         }
 

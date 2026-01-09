@@ -83,9 +83,10 @@ namespace SuccessStory.Clients
 
             if (!IsLocal)
             {
+                var swApi = Stopwatch.StartNew();
                 ObservableCollection<GameAchievement> steamAchievements = SteamApi.GetAchievements(game.GameId, SteamApi.CurrentAccountInfos);
-                sw.Stop();
-                Logger.Debug($"SteamApi.GetAchievements took {sw.ElapsedMilliseconds}ms for {game.Name}");
+                swApi.Stop();
+                Logger.Debug($"SteamApi.GetAchievements took {swApi.ElapsedMilliseconds}ms for {game.Name}");
 
                 if (steamAchievements?.Count > 0)
                 {
@@ -222,7 +223,7 @@ namespace SuccessStory.Clients
                                         Name = x.Name,
                                         Description = x.Description,
                                         UrlUnlocked = x.UrlUnlocked,
-                                        UrlLocked = x.UrlUnlocked,
+                                        UrlLocked = x.UrlLocked ?? x.UrlUnlocked,
                                         DateUnlocked = x.DateUnlocked,
                                         Percent = x.Percent,
                                         GamerScore = x.GamerScore,
@@ -436,19 +437,22 @@ namespace SuccessStory.Clients
         {
             var sw = Stopwatch.StartNew();
             ObservableCollection<GameAchievement> steamAchievements = SteamApi.GetAchievementsSchema(appId.ToString()).Item2;
-            steamAchievements.ForEach(x =>
+            if (steamAchievements != null)
             {
-            Models.Achievement found = gameAchievements.Items?.Find(y => y.ApiName.IsEqual(x.Id));
-            if (found != null)
-            {
-                found.Percent = x.Percent;
-                found.GamerScore = x.GamerScore;
+                steamAchievements.ForEach(x =>
+                {
+                    Models.Achievement found = gameAchievements.Items?.Find(y => y.ApiName.IsEqual(x.Id));
+                    if (found != null)
+                    {
+                        found.Percent = x.Percent;
+                        found.GamerScore = x.GamerScore;
+                    }
+                });
             }
-        });
-        PluginDatabase.AddOrUpdate(gameAchievements);
-        sw.Stop();
-        Logger.Debug($"Steam.SetRarity implementation took {sw.ElapsedMilliseconds}ms");
-    }
+            PluginDatabase.AddOrUpdate(gameAchievements);
+            sw.Stop();
+            Logger.Debug($"Steam.SetRarity implementation took {sw.ElapsedMilliseconds}ms");
+        }
 
         #region Configuration
 
@@ -629,22 +633,25 @@ namespace SuccessStory.Clients
         /// <returns>List of updated achievements.</returns>
         private List<Achievement> GetProgressionByWeb(List<Achievement> achievements, Game game)
         {
-            var achievementsProgression = SteamApi.GetProgressionByWeb(uint.Parse(game.GameId), SteamApi.CurrentAccountInfos);
-            if (achievementsProgression == null)
+            if (uint.TryParse(game.GameId, out uint appId))
             {
-                return achievements;
-            }
-
-            foreach (var achievement in achievements)
-            {
-                var achievementProgression = achievementsProgression.FirstOrDefault(x => x.Id.IsEqual(achievement.ApiName));
-                if (achievementProgression != null)
+                var achievementsProgression = SteamApi.GetProgressionByWeb(appId, SteamApi.CurrentAccountInfos);
+                if (achievementsProgression == null)
                 {
-                    achievement.Progression = new AchProgression
+                    return achievements;
+                }
+
+                foreach (var achievement in achievements)
+                {
+                    var achievementProgression = achievementsProgression.FirstOrDefault(x => x.Id.IsEqual(achievement.ApiName));
+                    if (achievementProgression != null)
                     {
-                        Value = achievementProgression.Value,
-                        Max = achievementProgression.Max
-                    };
+                        achievement.Progression = new AchProgression
+                        {
+                            Value = achievementProgression.Value,
+                            Max = achievementProgression.Max
+                        };
+                    }
                 }
             }
 

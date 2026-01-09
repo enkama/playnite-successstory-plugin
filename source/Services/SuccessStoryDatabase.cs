@@ -396,7 +396,7 @@ namespace SuccessStory.Services
                     bool isSteam = game.Source?.Name?.IsEqual("Steam") ?? false;
                     bool isXbox = game.Source?.Name?.IsEqual("Xbox") ?? false;
 
-                    bool completed = Task.Run(() =>
+                    var searchTask = Task.Run(() =>
                     {
                         try
                         {
@@ -470,11 +470,11 @@ namespace SuccessStory.Services
                         }
                         catch (Exception ex)
                         {
-                            Logger.Error(ex, "Error in SetEstimateTimeToUnlock Task");
+                            Logger.Error(ex, "Error in SetEstimateTimeToUnlock search task");
                         }
-                    }).Wait(10000); // Increased timeout to 10s
+                    });
 
-                    if (!completed)
+                    if (Task.WhenAny(searchTask, Task.Delay(10000)).GetAwaiter().GetResult() != searchTask)
                     {
                         Logger.Warn($"SetEstimateTimeToUnlock timed out for {game.Name}");
                         return gameAchievements;

@@ -99,6 +99,7 @@ namespace SuccessStory.Clients
                     var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
                     if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
                     string cacheKey = Regex.Replace(cacheKeyUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                    if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(cacheKeyUrl);
                     string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                     if (File.Exists(cacheFile))
                     {
@@ -813,6 +814,7 @@ namespace SuccessStory.Clients
                 if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
 
                 string cacheKey = Regex.Replace(searchResultUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                if (cacheKey.Length > 100) cacheKey = Common.Helper.GetMd5Hash(searchResultUrl);
                 string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                 File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
 
@@ -854,5 +856,6 @@ namespace SuccessStory.Clients
                     Common.LogError(exUpdate, false, $"Exophase background: failed to apply images to DB for {game.Name}", true, PluginDatabase.PluginName);
                 }
             }
+        }
     }
 }

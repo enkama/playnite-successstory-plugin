@@ -50,14 +50,21 @@ namespace SuccessStory.Clients
                     }
 
                     // Run in background with timeout to avoid blocking UI thread and potential deadlocks indefinitely
-                    Task<List<Achievement>> task = Task.Run(async () => await GetXboxAchievements(game, authData));
-                    if (task.Wait(TimeSpan.FromSeconds(30)))
+                    using (CancellationTokenSource cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
                     {
-                        AllAchievements = task.Result;
-                    }
-                    else
-                    {
-                        Logger.Warn($"Xbox achievements retrieval timed out for {game.Name} after 30 seconds.");
+                        try
+                        {
+                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData), cts.Token).GetAwaiter().GetResult();
+                        }
+                        catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
+                        {
+                            Logger.Warn($"Xbox achievements retrieval timed out for {game.Name} after 30 seconds.");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error(ex, $"Error on GetXboxAchievements() for {game.Name}");
+                            ShowNotificationPluginError(ex);
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -192,7 +199,14 @@ namespace SuccessStory.Clients
             else if (!game.GameId.IsNullOrEmpty())
             {
                 TitleHistoryResponse.Title libTitle = Task.Run(async () => await XboxAccountClient.GetTitleInfo(game.GameId)).GetAwaiter().GetResult();
-                titleId = libTitle.titleId;
+                if (libTitle != null)
+                {
+                    titleId = libTitle.titleId;
+                }
+                else
+                {
+                    Logger.Warn($"{ClientName} - No title info found for {game.GameId}");
+                }
 
                 Common.LogDebug(true, $"{ClientName} - name: {game.Name} - gameId: {game.GameId} - titleId: {titleId}");
             }
