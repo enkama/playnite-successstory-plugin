@@ -54,7 +54,11 @@ namespace SuccessStory.Clients
 
             try
             {
+                Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(url).GetAwaiter().GetResult();
+                sw.Stop();
+                Logger.Info($"SearchGame web request took {sw.ElapsedMilliseconds}ms for {url}");
+
                 string response = sourceData.Item1;
 
                 if (response.IsNullOrEmpty())
@@ -143,7 +147,11 @@ namespace SuccessStory.Clients
 
             try
             {
+                Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(urlTrueAchievement).GetAwaiter().GetResult();
+                sw.Stop();
+                Logger.Info($"GetEstimateTimeToUnlock web request took {sw.ElapsedMilliseconds}ms for {urlTrueAchievement}");
+
                 string response = sourceData.Item1;
 
                 if (response.IsNullOrEmpty())
@@ -225,7 +233,11 @@ namespace SuccessStory.Clients
 
             try
             {
+                Stopwatch sw = Stopwatch.StartNew();
                 var sourceData = Web.DownloadSourceDataWebView(gameUrl).GetAwaiter().GetResult();
+                sw.Stop();
+                Logger.Info($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl}");
+
                 string response = sourceData.Item1;
                 if (response.IsNullOrEmpty())
                 {
@@ -253,8 +265,7 @@ namespace SuccessStory.Clients
                     ".achievement",
                     ".achievements",
                     ".achievement-list",
-                    "#achievements",
-                    "img"
+                    "#achievements"
                 };
 
                 // Collect img elements
@@ -279,15 +290,26 @@ namespace SuccessStory.Clients
                     }
                 }
 
-                // Fallback: all images
+                // Fallback: search main content areas if specific selectors failed
                 if (!imgElements.Any())
                 {
-                    imgElements.AddRange(doc.QuerySelectorAll("img"));
+                    var mainElements = doc.QuerySelectorAll("main, #main, .main, #content, .content");
+                    if (mainElements != null)
+                    {
+                        foreach (var main in mainElements)
+                        {
+                            imgElements.AddRange(main.QuerySelectorAll("img"));
+                        }
+                    }
                 }
 
+                var processedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 int index = 0;
                 foreach (var img in imgElements)
                 {
+                    // Cap processed images to avoid performance issues on huge pages
+                    if (index >= 500) break;
+
                     try
                     {
                         string src = img.GetAttribute("src") ?? img.GetAttribute("data-src") ?? img.GetAttribute("data-original");
@@ -309,6 +331,10 @@ namespace SuccessStory.Clients
                             // relative path
                             imgUrl = new Uri(baseUri, imgUrl).ToString();
                         }
+
+                        // De-duplicate by URL
+                        if (processedUrls.Contains(imgUrl)) continue;
+                        processedUrls.Add(imgUrl);
 
                         // Determine a best-effort name/key for the image
                         string name = img.GetAttribute("alt") ?? img.GetAttribute("title");

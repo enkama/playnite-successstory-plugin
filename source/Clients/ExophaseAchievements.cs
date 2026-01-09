@@ -105,16 +105,31 @@ namespace SuccessStory.Clients
                         var age = DateTime.UtcNow - File.GetLastWriteTimeUtc(cacheFile);
                         if (age.TotalDays <= 30)
                         {
-                            // load cached images and build achievements quickly
+                            // load cached achievements quickly
                             var jsonCache = File.ReadAllText(cacheFile);
-                            var cached = Serialization.FromJson<Dictionary<string, string>>(jsonCache);
-                            if (cached != null && cached.Count > 0)
+                            try
                             {
-                                var cachedList = cached.Select(kv => new Achievement { Name = kv.Key, UrlUnlocked = kv.Value }).ToList();
-                                gameAchievements.Items = cachedList;
-                                // Register to resolver so others skip
-                                Services.AchievementImageResolver.RegisterImages(game, cached);
-                                return gameAchievements;
+                                var cached = Serialization.FromJson<Dictionary<string, Achievement>>(jsonCache);
+                                if (cached != null && cached.Count > 0)
+                                {
+                                    gameAchievements.Items = cached.Values.ToList();
+                                    // Register images to resolver
+                                    var imagesDict = cached.ToDictionary(kv => kv.Key, kv => kv.Value.UrlUnlocked);
+                                    Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+                                    return gameAchievements;
+                                }
+                            }
+                            catch
+                            {
+                                // fall back to old format if deserialization fails
+                                var cachedOld = Serialization.FromJson<Dictionary<string, string>>(jsonCache);
+                                if (cachedOld != null && cachedOld.Count > 0)
+                                {
+                                    var cachedList = cachedOld.Select(kv => new Achievement { Name = kv.Key, UrlUnlocked = kv.Value }).ToList();
+                                    gameAchievements.Items = cachedList;
+                                    Services.AchievementImageResolver.RegisterImages(game, cachedOld);
+                                    return gameAchievements;
+                                }
                             }
                         }
                     }
@@ -179,61 +194,7 @@ namespace SuccessStory.Clients
                                 Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
 
                                 // Background fetch: parse, cache and register images without blocking
-                                Task.Run(() =>
-                                {
-                                    try
-                                    {
-                                        var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
-                                        var parsed = ParseData(webDataBg.Item1);
-                                        var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
-                                        if (imagesDict.Count > 0)
-                                        {
-                                            var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
-                                            if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                                            string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                                            string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
-                                            File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
-                                            Services.AchievementImageResolver.RegisterImages(game, imagesDict);
-
-                                            try
-                                            {
-                                                // Also apply images to any existing GameAchievements in the plugin DB so UI updates immediately
-                                                var existing = PluginDatabase.Get(game, true);
-                                                if (existing != null && existing.Items != null && existing.Items.Count > 0)
-                                                {
-                                                    bool changed = false;
-                                                    foreach (var it in existing.Items)
-                                                    {
-                                                        if (it == null) continue;
-                                                        string key = it.Name ?? it.ApiName;
-                                                        if (key.IsNullOrEmpty()) continue;
-                                                        if (imagesDict.TryGetValue(key, out string url))
-                                                        {
-                                                            if (it.UrlUnlocked != url)
-                                                            {
-                                                                it.UrlUnlocked = url;
-                                                                changed = true;
-                                                            }
-                                                        }
-                                                    }
-                                                    if (changed)
-                                                    {
-                                                        PluginDatabase.AddOrUpdate(existing);
-                                                        // Updated DB with new images
-                                                    }
-                                                }
-                                            }
-                                            catch (Exception exUpdate)
-                                            {
-                                                Common.LogError(exUpdate, false, $"Exophase background: failed to apply images to DB for {game.Name}", true, PluginDatabase.PluginName);
-                                            }
-                                        }
-                                    }
-                                    catch (Exception bgEx)
-                                    {
-                                        Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
-                                    }
-                                });
+                                ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
 
                                 dataExophase = string.Empty;
                             }
@@ -289,61 +250,7 @@ namespace SuccessStory.Clients
                         if (!hasAchievementLists)
                         {
                             // Schedule background WebView fetch and skip blocking retrieval
-                            Task.Run(() =>
-                            {
-                                try
-                                {
-                                    var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
-                                    var parsed = ParseData(webDataBg.Item1);
-                                    var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
-                                    if (imagesDict.Count > 0)
-                                    {
-                                        var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
-                                        if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                                        string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                                        string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
-                                        File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
-                                        Services.AchievementImageResolver.RegisterImages(game, imagesDict);
-
-                                        try
-                                        {
-                                            // Also apply images to any existing GameAchievements in the plugin DB so UI updates immediately
-                                            var existing = PluginDatabase.Get(game, true);
-                                            if (existing != null && existing.Items != null && existing.Items.Count > 0)
-                                            {
-                                                bool changed = false;
-                                                foreach (var it in existing.Items)
-                                                {
-                                                    if (it == null) continue;
-                                                    string key = it.Name ?? it.ApiName;
-                                                    if (key.IsNullOrEmpty()) continue;
-                                                    if (imagesDict.TryGetValue(key, out string url))
-                                                    {
-                                                        if (it.UrlUnlocked != url)
-                                                        {
-                                                            it.UrlUnlocked = url;
-                                                            changed = true;
-                                                        }
-                                                    }
-                                                }
-                                                if (changed)
-                                                {
-                                                    PluginDatabase.AddOrUpdate(existing);
-                                                    // Updated DB with new images
-                                                }
-                                            }
-                                        }
-                                        catch (Exception exUpdate)
-                                        {
-                                            Common.LogError(exUpdate, false, $"Exophase background: failed to apply images to DB for {game.Name}", true, PluginDatabase.PluginName);
-                                        }
-                                    }
-                                }
-                                catch (Exception bgEx)
-                                {
-                                    Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
-                                }
-                            });
+                            ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
 
                             dataExophase = string.Empty;
                         }
@@ -352,28 +259,7 @@ namespace SuccessStory.Clients
                     {
                         Common.LogError(exWeb, false, $"Exophase synchronous WebView fetch failed for {searchResult.Url}; scheduling background fetch", true, PluginDatabase.PluginName);
                         // Fallback to background fetch
-                        Task.Run(() =>
-                        {
-                            try
-                            {
-                                var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
-                                var parsed = ParseData(webDataBg.Item1);
-                                var imagesDict = parsed.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
-                                if (imagesDict.Count > 0)
-                                {
-                                    var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
-                                    if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                                    string cacheKey = Regex.Replace(searchResult.Url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
-                                    string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
-                                    File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
-                                    Services.AchievementImageResolver.RegisterImages(game, imagesDict);
-                                }
-                            }
-                            catch (Exception bgEx)
-                            {
-                                Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
-                            }
-                        });
+                        ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
 
                         dataExophase = string.Empty;
                     }
@@ -396,18 +282,10 @@ namespace SuccessStory.Clients
                      {
                          dataExophaseLocalised = Web.DownloadStringData(fetchUrl).GetAwaiter().GetResult();
                      }
-                     catch (Exception)
+                     catch (Exception ex)
                      {
-                         try
-                         {
-                             // Localized fetch via WebView skipped for speed; fall back to non-localized data already fetched.
-                             Common.LogError(new Exception("Exophase localized fetch skipped"), false, $"Skipping Exophase localized WebView fetch for {searchResult.Url} to avoid blocking", true, PluginDatabase.PluginName);
-                             dataExophaseLocalised = string.Empty;
-                         }
-                         catch (Exception ex)
-                         {
-                             Common.LogError(ex, false, "Exophase localized WebView fetch failed", true, PluginDatabase.PluginName);
-                         }
+                         Common.LogError(ex, false, $"Exophase localized fetch failed for {searchResult.Url}", true, PluginDatabase.PluginName);
+                         dataExophaseLocalised = string.Empty;
                      }
                     // If localized page contains a notice message, skip retries
                     if (!string.IsNullOrEmpty(dataExophaseLocalised) && dataExophaseLocalised.Contains("Notice Message App"))
@@ -886,5 +764,95 @@ namespace SuccessStory.Clients
 
             return allAchievements;
         }
+
+
+        private void ScheduleBackgroundFetch(string fetchUrl, string searchResultUrl, Game game)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    var webDataBg = Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains).GetAwaiter().GetResult();
+                    if (webDataBg.Item1.IsNullOrEmpty())
+                    {
+                        Logger.Warn($"Exophase background fetch: no data from {fetchUrl}");
+                        return;
+                    }
+
+                    var parsed = ParseData(webDataBg.Item1);
+                    CacheAndApplyImages(parsed, searchResultUrl, game);
+                }
+                catch (Exception bgEx)
+                {
+                    Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResultUrl}", true, PluginDatabase.PluginName);
+                }
+            });
+        }
+
+        private void CacheAndApplyImages(List<Achievement> parsed, string searchResultUrl, Game game)
+        {
+            // Filter out empty Name/UrlUnlocked and de-duplicate by Name
+            var achievementsDict = new Dictionary<string, Achievement>();
+            var imagesDict = new Dictionary<string, string>();
+            foreach (var a in parsed)
+            {
+                if (a.Name.IsNullOrEmpty()) continue;
+                if (!achievementsDict.ContainsKey(a.Name))
+                {
+                    achievementsDict.Add(a.Name, a);
+                    if (!a.UrlUnlocked.IsNullOrEmpty())
+                    {
+                        imagesDict.Add(a.Name, a.UrlUnlocked);
+                    }
+                }
+            }
+
+            if (achievementsDict.Count > 0)
+            {
+                var cacheDir = Path.Combine(PluginDatabase.Paths.PluginCachePath, "ExophaseImages");
+                if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+
+                string cacheKey = Regex.Replace(searchResultUrl ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+                string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
+                File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
+
+                if (imagesDict.Count > 0)
+                {
+                    Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+                }
+
+                try
+                {
+                    // Also apply images to any existing GameAchievements in the plugin DB so UI updates immediately
+                    var existing = PluginDatabase.Get(game, true);
+                    if (existing != null && existing.Items != null && existing.Items.Count > 0)
+                    {
+                        bool changed = false;
+                        foreach (var it in existing.Items)
+                        {
+                            if (it == null) continue;
+                            string key = it.Name ?? it.ApiName;
+                            if (key.IsNullOrEmpty()) continue;
+                            if (imagesDict.TryGetValue(key, out string url))
+                            {
+                                if (it.UrlUnlocked != url)
+                                {
+                                    it.UrlUnlocked = url;
+                                    changed = true;
+                                }
+                            }
+                        }
+
+                        if (changed)
+                        {
+                            PluginDatabase.AddOrUpdate(existing);
+                        }
+                    }
+                }
+                catch (Exception exUpdate)
+                {
+                    Common.LogError(exUpdate, false, $"Exophase background: failed to apply images to DB for {game.Name}", true, PluginDatabase.PluginName);
+                }
+            }
     }
 }

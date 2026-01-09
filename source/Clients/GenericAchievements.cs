@@ -95,6 +95,12 @@ namespace SuccessStory.Clients
         public virtual bool IsConnected() => false;
 
         /// <summary>
+        /// Checks if the plugin is connected to the service asynchronously.
+        /// </summary>
+        /// <returns>A task representing the result of the connection check.</returns>
+        public virtual Task<bool> IsConnectedAsync() => Task.FromResult(IsConnected());
+
+        /// <summary>
         /// Checks if the plugin is configured correctly.
         /// </summary>
         /// <returns>true if configured, false otherwise.</returns>

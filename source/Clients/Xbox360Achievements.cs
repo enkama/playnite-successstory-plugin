@@ -77,9 +77,9 @@ namespace SuccessStory.Clients
                     var settings = SuccessStory.PluginDatabase?.PluginSettings?.Settings;
                     _xeniaPath = settings?.XeniaInstallationFolder ?? _xeniaPath;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // ignore access errors to settings
+                    _logger.Error(ex, "Error accessing SuccessStory settings in Xbox360Achievements.EnsureInitialized");
                 }
 
                 // Fallbacks or defaults can be handled in InitializePaths implementation
@@ -430,8 +430,9 @@ namespace SuccessStory.Clients
             {
                 return SuccessStory.PluginDatabase?.PluginSettings?.Settings?.EnableXbox360Achievements ?? false;
             }
-            catch
+            catch (Exception ex)
             {
+                Logger.Error(ex, "Error checking EnabledInSettings for Xbox 360 achievements");
                 return false;
             }
         }

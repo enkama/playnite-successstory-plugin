@@ -40,6 +40,7 @@ namespace SuccessStory.Clients
                     var swAssets = Stopwatch.StartNew();
                     var assets = EpicApi.GetAssets();
                     swAssets.Stop();
+                    Logger.Debug($"Epic.GetAssets took {swAssets.ElapsedMilliseconds}ms");
 
                     var asset = assets.FirstOrDefault(x => x.AppName.IsEqual(game.GameId));
                     if (asset == null)
@@ -51,6 +52,7 @@ namespace SuccessStory.Clients
                     var swAch = Stopwatch.StartNew();
                     ObservableCollection<GameAchievement> epicAchievements = EpicApi.GetAchievements(asset.Namespace, EpicApi.CurrentAccountInfos);
                     swAch.Stop();
+                    Logger.Debug($"Epic.GetAchievements API call took {swAch.ElapsedMilliseconds}ms");
                     if (epicAchievements?.Count > 0)
                     {
                         AllAchievements = epicAchievements.Select(x => new Achievement
@@ -113,15 +115,10 @@ namespace SuccessStory.Clients
                                     {
                                         // try exact normalized name match
                                         exMatch = exSearch.FirstOrDefault(x => NormalizeGameName(x.Name).IsEqual(normalizedGame));
-                                        if (exMatch != null)
-                                        {
-                                            // selected exact normalized match
-                                        }
-                                        else
+                                        if (exMatch == null)
                                         {
                                             // fallback to best even if under threshold but log warning
                                             exMatch = scored.First().Item;
-                                            // fallback to best candidate despite low score
                                         }
                                     }
                                 }
@@ -171,15 +168,17 @@ namespace SuccessStory.Clients
                     }
 
                     // Set source link
-                    if (gameAchievements.HasAchievements)
+                    if (gameAchievements.HasAchievements && gameAchievements.SourcesLink == null)
                     {
                         var swSlug = Stopwatch.StartNew();
                         string productSlug = EpicApi.GetProductSlug(asset.Namespace);
                         swSlug.Stop();
+                        Logger.Debug($"Epic.GetProductSlug took {swSlug.ElapsedMilliseconds}ms");
 
                         var swLink = Stopwatch.StartNew();
                         gameAchievements.SourcesLink = EpicApi.GetAchievementsSourceLink(game.Name, productSlug, EpicApi.CurrentAccountInfos);
                         swLink.Stop();
+                        Logger.Debug($"Epic.GetAchievementsSourceLink took {swLink.ElapsedMilliseconds}ms");
                     }
                 }
                 catch (Exception ex)
@@ -196,6 +195,7 @@ namespace SuccessStory.Clients
             gameAchievements.SetRaretyIndicator();
             PluginDatabase.AddOrUpdate(gameAchievements);
             swOverall.Stop();
+            Logger.Info($"Epic.GetAchievements execution took {swOverall.ElapsedMilliseconds}ms");
             return gameAchievements;
         }
 

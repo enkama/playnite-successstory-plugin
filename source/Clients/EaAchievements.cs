@@ -76,40 +76,19 @@ namespace SuccessStory.Clients
                         }
                         else
                         {
-                            // Try to get images from Exophase first, then TrueAchievements (Xbox then Steam)
-                            try
-                            {
-                                Dictionary<string, string> images = new Dictionary<string, string>();
-
-                                // Helper to normalize achievement names for tolerant matching
-                                Func<string, string> normalize = (s) =>
+                                // 0) Try to get images from the resolver cache first
+                                if (Services.AchievementImageResolver.TryGetImages(game, out images) && images?.Count > 0)
                                 {
-                                    if (s.IsNullOrEmpty())
-                                    {
-                                        return string.Empty;
-                                    }
-                                    string t = s.RemoveDiacritics().ToLowerInvariant();
-                                    // remove punctuation and extra spaces
-                                    t = Regex.Replace(t, "[^a-z0-9 ]+", string.Empty);
-                                    t = Regex.Replace(t, "\\s+", " ").Trim();
-                                    return t;
-                                };
-
-                                // small helper to detect preferred keywords in exophase entries (pc/origin/ea)
-                                Func<SearchResult, bool> prefersPc = (sr) =>
-                                {
-                                    if (sr == null) return false;
-                                    string url = (sr.Url ?? string.Empty).ToLowerInvariant();
-                                    string name = (sr.Name ?? string.Empty).ToLowerInvariant();
-                                    string platforms = sr.Platforms != null ? string.Join(" ", sr.Platforms).ToLowerInvariant() : string.Empty;
-                                    return url.Contains("origin") || url.Contains("pc") || url.Contains("windows") || name.Contains("origin") || name.Contains("pc") || platforms.Contains("electronic arts") || name.Contains("ea");
-                                };
+                                    Logger.Info($"Found {images.Count} images in resolver cache for {game.Name}");
+                                }
 
                                 // 1) Try Exophase first (it's known to have EA images sometimes)
-                                try
+                                if (images.Count == 0)
                                 {
-                                     if (SuccessStory.ExophaseAchievements != null)
-                                     {
+                                    try
+                                    {
+                                         if (SuccessStory.ExophaseAchievements != null)
+                                         {
                                         // Try with platform filter first
                                         var exSearch = SuccessStory.ExophaseAchievements.SearchGame(game.Name, "Electronic Arts");
 

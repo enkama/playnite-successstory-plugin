@@ -182,9 +182,17 @@ namespace SuccessStory.Controls
             if (order == null) return;
 
             // Reset indices
-            NameIndex = 1;
-            CalIndex = 2;
-            RarityIndex = 3;
+            NameIndex = 0;
+            CalIndex = 0;
+            RarityIndex = 0;
+
+            PART_SortNameOrder.Content = string.Empty;
+            PART_SortCalOrder.Content = string.Empty;
+            PART_SortRarityOrder.Content = string.Empty;
+
+            PART_SortName.Content = string.Empty;
+            PART_SortCal.Content = string.Empty;
+            PART_SortRarity.Content = string.Empty;
 
             // First
             switch (order.OrderAchievementTypeFirst)

@@ -49,8 +49,16 @@ namespace SuccessStory.Clients
                         return gameAchievements;
                     }
 
-                    // Run in background to avoid blocking UI thread and potential deadlocks
-                    AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData)).GetAwaiter().GetResult();
+                    // Run in background with timeout to avoid blocking UI thread and potential deadlocks indefinitely
+                    Task<List<Achievement>> task = Task.Run(async () => await GetXboxAchievements(game, authData));
+                    if (task.Wait(TimeSpan.FromSeconds(30)))
+                    {
+                        AllAchievements = task.Result;
+                    }
+                    else
+                    {
+                        Logger.Warn($"Xbox achievements retrieval timed out for {game.Name} after 30 seconds.");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -137,12 +145,26 @@ namespace SuccessStory.Clients
         {
             if (CachedIsConnectedResult == null)
             {
-                CachedIsConnectedResult = Task.Run(async () => await XboxAccountClient.GetIsUserLoggedIn()).GetAwaiter().GetResult();
-                if (!(bool)CachedIsConnectedResult && File.Exists(XboxAccountClient.liveTokensPath))
+                // Sync-over-async: We run the full async flow on a background thread to avoid deadlocks.
+                // Note: Calling .GetAwaiter().GetResult() from a thread with a synchronization context (like the UI thread)
+                // still carries some risk. Prefer using IsConnectedAsync() whenever possible.
+                CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+            }
+
+            return (bool)CachedIsConnectedResult;
+        }
+
+        public override async Task<bool> IsConnectedAsync()
+        {
+            if (CachedIsConnectedResult == null)
+            {
+                bool loggedIn = await XboxAccountClient.GetIsUserLoggedIn();
+                if (!loggedIn && File.Exists(XboxAccountClient.liveTokensPath))
                 {
-                    Task.Run(async () => await XboxAccountClient.RefreshTokens()).GetAwaiter().GetResult();
-                    CachedIsConnectedResult = Task.Run(async () => await XboxAccountClient.GetIsUserLoggedIn()).GetAwaiter().GetResult();
+                    await XboxAccountClient.RefreshTokens();
+                    loggedIn = await XboxAccountClient.GetIsUserLoggedIn();
                 }
+                CachedIsConnectedResult = loggedIn;
             }
 
             return (bool)CachedIsConnectedResult;

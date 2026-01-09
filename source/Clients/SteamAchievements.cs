@@ -83,9 +83,9 @@ namespace SuccessStory.Clients
 
             if (!IsLocal)
             {
-                var sw = Stopwatch.StartNew();
                 ObservableCollection<GameAchievement> steamAchievements = SteamApi.GetAchievements(game.GameId, SteamApi.CurrentAccountInfos);
                 sw.Stop();
+                Logger.Debug($"SteamApi.GetAchievements took {sw.ElapsedMilliseconds}ms for {game.Name}");
 
                 if (steamAchievements?.Count > 0)
                 {
@@ -137,8 +137,6 @@ namespace SuccessStory.Clients
 
                     // Assign achievements to the GameAchievements container so HasAchievements becomes true
                     gameAchievements.Items = allAchievements;
-                    // Assign achievements to the GameAchievements container
-                    gameAchievements.Items = allAchievements;
 
                     var swStats = Stopwatch.StartNew();
                     gameAchievements.ItemsStats = SteamApi.GetUsersStats(appId, SteamApi.CurrentAccountInfos)?.Select(x => new GameStats
@@ -149,6 +147,7 @@ namespace SuccessStory.Clients
                                 .Replace(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator))
                     })?.ToList() ?? new List<GameStats>();
                     swStats.Stop();
+                    Logger.Debug($"SteamApi.GetUsersStats took {swStats.ElapsedMilliseconds}ms");
 
                     // Set source link
                     if (gameAchievements.HasAchievements)
@@ -169,6 +168,7 @@ namespace SuccessStory.Clients
                         var swProg = Stopwatch.StartNew();
                         gameAchievements.Items = GetProgressionByWeb(gameAchievements.Items, game);
                         swProg.Stop();
+                        Logger.Debug($"GetProgressionByWeb took {swProg.ElapsedMilliseconds}ms");
                     }
 
                 }
@@ -291,7 +291,9 @@ namespace SuccessStory.Clients
             var swRarity = Stopwatch.StartNew();
             SetRarity(appId, gameAchievements);
             swRarity.Stop();
+            Logger.Debug($"Steam.SetRarity took {swRarity.ElapsedMilliseconds}ms");
             swOverall.Stop();
+            Logger.Info($"Steam.GetAchievements execution took {swOverall.ElapsedMilliseconds}ms for {game.Name}");
             gameAchievements.SetRaretyIndicator();
 
             return gameAchievements;
@@ -322,6 +324,7 @@ namespace SuccessStory.Clients
                 var swManual = Stopwatch.StartNew();
                 gameAchievements = GetManual(appId, game);
                 swManual.Stop();
+                Logger.Debug($"Steam.GetManual took {swManual.ElapsedMilliseconds}ms");
             }
 
             if (IsLocal && !gameAchievements.HasAchievements)
@@ -377,8 +380,10 @@ namespace SuccessStory.Clients
             var swRarity = Stopwatch.StartNew();
             SetRarity(appId, gameAchievements);
             swRarity.Stop();
+            Logger.Debug($"Steam.SetRarity took {swRarity.ElapsedMilliseconds}ms");
             gameAchievements.SetRaretyIndicator();
             swOverall.Stop();
+            Logger.Info($"Steam.GetAchievements (appId) execution took {swOverall.ElapsedMilliseconds}ms for {game.Name}");
             return gameAchievements;
         }
 
@@ -416,6 +421,7 @@ namespace SuccessStory.Clients
                 gameAchievements.Items = allAchievements;
                 gameAchievements.IsManual = true;
                 swOverall.Stop();
+                Logger.Debug($"Steam.GetManual execution took {swOverall.ElapsedMilliseconds}ms");
             }
 
             return gameAchievements;
@@ -432,16 +438,17 @@ namespace SuccessStory.Clients
             ObservableCollection<GameAchievement> steamAchievements = SteamApi.GetAchievementsSchema(appId.ToString()).Item2;
             steamAchievements.ForEach(x =>
             {
-                Models.Achievement found = gameAchievements.Items?.Find(y => y.ApiName.IsEqual(x.Id));
-                if (found != null)
-                {
-                    found.Percent = x.Percent;
-                    found.GamerScore = x.GamerScore;
-                }
-            });
-            PluginDatabase.AddOrUpdate(gameAchievements);
-            sw.Stop();
-        }
+            Models.Achievement found = gameAchievements.Items?.Find(y => y.ApiName.IsEqual(x.Id));
+            if (found != null)
+            {
+                found.Percent = x.Percent;
+                found.GamerScore = x.GamerScore;
+            }
+        });
+        PluginDatabase.AddOrUpdate(gameAchievements);
+        sw.Stop();
+        Logger.Debug($"Steam.SetRarity implementation took {sw.ElapsedMilliseconds}ms");
+    }
 
         #region Configuration
 
@@ -622,13 +629,13 @@ namespace SuccessStory.Clients
         /// <returns>List of updated achievements.</returns>
         private List<Achievement> GetProgressionByWeb(List<Achievement> achievements, Game game)
         {
-			var achievementsProgression = SteamApi.GetProgressionByWeb(uint.Parse(game.GameId), SteamApi.CurrentAccountInfos);
-			if (achievementsProgression == null)
-			{
-				return achievements;
-			}
+            var achievementsProgression = SteamApi.GetProgressionByWeb(uint.Parse(game.GameId), SteamApi.CurrentAccountInfos);
+            if (achievementsProgression == null)
+            {
+                return achievements;
+            }
 
-			foreach (var achievement in achievements)
+            foreach (var achievement in achievements)
             {
                 var achievementProgression = achievementsProgression.FirstOrDefault(x => x.Id.IsEqual(achievement.ApiName));
                 if (achievementProgression != null)
