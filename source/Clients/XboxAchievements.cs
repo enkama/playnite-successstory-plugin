@@ -26,6 +26,7 @@ namespace SuccessStory.Clients
         private static readonly object _initLock = new object();
         private static readonly SemaphoreSlim _isConnectedSemaphore = new SemaphoreSlim(1, 1);
         private static readonly ConcurrentDictionary<string, string> _titleIdCache = new ConcurrentDictionary<string, string>();
+        private static readonly int _titleIdCacheMaxSize = 500; // Prevent unbounded growth
         private static readonly HttpClient _sharedHttpClient = new HttpClient();
         protected static readonly Lazy<XboxAccountClient> xboxAccountClient = new Lazy<XboxAccountClient>(() => new XboxAccountClient(API.Instance, PluginDatabase.Paths.PluginUserDataPath + "\\..\\" + PlayniteTools.GetPluginId(ExternalPlugin.XboxLibrary)));
         internal static XboxAccountClient XboxAccountClient => xboxAccountClient.Value;
@@ -61,7 +62,7 @@ namespace SuccessStory.Clients
                     {
                         try
                         {
-                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData), cts.Token).GetAwaiter().GetResult();
+                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData), cts.Token).GetAwaiter().GetResult() ?? new List<Achievement>();
                         }
                         catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
                         {
@@ -82,18 +83,6 @@ namespace SuccessStory.Clients
             else
             {
                 ShowNotificationPluginNoAuthenticate(ExternalPlugin.XboxLibrary);
-            }
-
-
-            // Set source link
-            if (gameAchievements.HasAchievements)
-            {
-                gameAchievements.SourcesLink = new SourceLink
-                {
-                    GameName = game.Name,
-                    Name = "Xbox",
-                    Url = $"https://account.xbox.com/{LocalLang}/GameInfoHub?titleid={GetTitleId(game)}&selectedTab=achievementsTab&activetab=main:mainTab2"
-                };
             }
 
             if (AllAchievements.Count > 0)
@@ -117,6 +106,17 @@ namespace SuccessStory.Clients
                     // Info: legitimately no achievements for this title
                     Logger.Info($"Xbox: No achievements found for {game.Name} (title may not have achievements)");
                 }
+            }
+
+            // Set source link AFTER populating Items
+            if (gameAchievements.HasAchievements)
+            {
+                gameAchievements.SourcesLink = new SourceLink
+                {
+                    GameName = game.Name,
+                    Name = "Xbox",
+                    Url = $"https://account.xbox.com/{LocalLang}/GameInfoHub?titleid={GetTitleId(game)}&selectedTab=achievementsTab&activetab=main:mainTab2"
+                };
             }
 
             // Set rarity from Exophase AFTER Items are populated — guarded to avoid crashing when Exophase integration is broken
@@ -266,6 +266,13 @@ namespace SuccessStory.Clients
                     var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId);
                     if (titleInfo != null && !string.IsNullOrEmpty(titleInfo.titleId))
                     {
+                        // Check cache size and clear if too large (simple bounded cache)
+                        if (_titleIdCache.Count >= _titleIdCacheMaxSize)
+                        {
+                            Logger.Debug($"Xbox title ID cache size limit reached ({_titleIdCacheMaxSize}), clearing cache");
+                            _titleIdCache.Clear();
+                        }
+                        
                         _titleIdCache.TryAdd(game.GameId, titleInfo.titleId);
                         return titleInfo.titleId;
                     }
@@ -377,7 +384,7 @@ namespace SuccessStory.Clients
                 }
             }
 
-            return null;
+            return new List<Achievement>();
         }
 
         /// <summary>

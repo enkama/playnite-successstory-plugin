@@ -66,6 +66,11 @@ namespace SuccessStory.Clients
         private const int CACHE_EXPIRATION_DAYS = 7;
         // Wait time in milliseconds for cookies to flush to disk
         private const int COOKIE_FLUSH_WAIT_MS = 2000;
+        // Maximum retry attempts for cookie flush
+        private const int COOKIE_FLUSH_MAX_RETRIES = 3;
+
+        private static readonly SemaphoreSlim _bgFetchSemaphore = new SemaphoreSlim(2);
+        private static readonly CancellationTokenSource _bgFetchCts = new CancellationTokenSource();
 
         static ExophaseAchievements()
         {
@@ -103,7 +108,18 @@ namespace SuccessStory.Clients
             return GetAchievements(game, new SearchResult { Name = game.Name, Url = url });
         }
 
+        public async Task<GameAchievements> GetAchievementsAsync(Game game, string url)
+        {
+            return await GetAchievementsAsync(game, new SearchResult { Name = game.Name, Url = url });
+        }
+
         public GameAchievements GetAchievements(Game game, SearchResult searchResult)
+        {
+            // Synchronous wrapper for backward compatibility
+            return GetAchievementsAsync(game, searchResult).GetAwaiter().GetResult();
+        }
+
+        public async Task<GameAchievements> GetAchievementsAsync(Game game, SearchResult searchResult)
         {
             GameAchievements gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
             List<Achievement> allAchievements = new List<Achievement>();
@@ -169,26 +185,26 @@ namespace SuccessStory.Clients
                     Common.LogError(ex, false, "Error reading Exophase cache", true, PluginDatabase.PluginName);
                 }
 
-                // Run fetch logic off the UI thread to prevent freezing
-                dataExophase = Task.Run(async () =>
+                // Fetch data asynchronously
+                try
                 {
+                    // Try WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
                     try
                     {
-                        // Try WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
-                        try
+                        var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
+                        if (!string.IsNullOrEmpty(webData.Item1))
                         {
-                            var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
-                            if (!string.IsNullOrEmpty(webData.Item1))
-                            {
-                                return webData.Item1;
-                            }
+                            dataExophase = webData.Item1;
                         }
-                        catch (Exception)
-                        {
-                            // WebView fetch failed; fall back to HTTP methods
-                        }
+                    }
+                    catch (Exception)
+                    {
+                        // WebView fetch failed; fall back to HTTP methods
+                    }
 
-                        // Fallback: try HTTP client then simple download
+                    // Fallback: try HTTP client then simple download
+                    if (string.IsNullOrEmpty(dataExophase))
+                    {
                         string fetched = null;
                         try
                         {
@@ -205,13 +221,16 @@ namespace SuccessStory.Clients
 
                         if (!string.IsNullOrEmpty(fetched))
                         {
-                            return fetched;
+                            dataExophase = fetched;
                         }
+                    }
 
-                        // Final fallback
+                    // Final fallback
+                    if (string.IsNullOrEmpty(dataExophase))
+                    {
                         try
                         {
-                            return await Web.DownloadStringData(fetchUrl);
+                            dataExophase = await Web.DownloadStringData(fetchUrl);
                         }
                         catch (Exception ex)
                         {
@@ -220,15 +239,15 @@ namespace SuccessStory.Clients
                             // Background fetch: parse, cache and register images without blocking
                             ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
 
-                            return string.Empty;
+                            dataExophase = string.Empty;
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
-                        return string.Empty;
-                    }
-                }).GetAwaiter().GetResult();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Error fetching Exophase page", true, PluginDatabase.PluginName);
+                    dataExophase = string.Empty;
+                }
 
                 // Check if the fetched page contains achievement lists; some Exophase pages don't include 'Achievements' in <title>
                 bool hasAchievementLists = false;
@@ -400,11 +419,25 @@ namespace SuccessStory.Clients
                 _ = webView.OpenDialog();
             }
 
-            // Wait for cookies to be flushed to disk
-            Thread.Sleep(COOKIE_FLUSH_WAIT_MS);
-            List<HttpCookie> httpCookies = CookiesTools.GetWebCookies(true);
+            // Wait for cookies to be flushed to disk with retry logic
+            List<HttpCookie> httpCookies = null;
+            for (int retry = 0; retry < COOKIE_FLUSH_MAX_RETRIES; retry++)
+            {
+                Thread.Sleep(COOKIE_FLUSH_WAIT_MS);
+                httpCookies = CookiesTools.GetWebCookies(true);
+                
+                if (httpCookies?.Count > 0)
+                {
+                    break;
+                }
+                
+                if (retry < COOKIE_FLUSH_MAX_RETRIES - 1)
+                {
+                    Logger.Debug($"Exophase Login: Waiting for cookies to flush (attempt {retry + 1}/{COOKIE_FLUSH_MAX_RETRIES})");
+                }
+            }
             
-            if (httpCookies.Count > 0)
+            if (httpCookies?.Count > 0)
             {
                 SetCookies(httpCookies);
             }
@@ -733,10 +766,21 @@ namespace SuccessStory.Clients
         {
             Task.Run(async () =>
             {
-                await _bgFetchSemaphore.WaitAsync();
                 try
                 {
-                    var webDataBg = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), false, CookiesDomains);
+                    await _bgFetchSemaphore.WaitAsync(_bgFetchCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Logger.Debug($"Exophase background fetch cancelled before starting for {searchResultUrl}");
+                    return;
+                }
+                
+                try
+                {
+                    _bgFetchCts.Token.ThrowIfCancellationRequested();
+                    
+                    var webDataBg = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
                     if (webDataBg.Item1.IsNullOrEmpty())
                     {
                         Logger.Warn($"Exophase background fetch: no data from {fetchUrl}");
@@ -746,6 +790,10 @@ namespace SuccessStory.Clients
                     var parsed = ParseData(webDataBg.Item1);
                     CacheAndApplyImages(parsed, searchResultUrl, game);
                 }
+                catch (OperationCanceledException)
+                {
+                    Logger.Debug($"Exophase background fetch cancelled for {searchResultUrl}");
+                }
                 catch (Exception bgEx)
                 {
                     Common.LogError(bgEx, false, $"Exophase background fetch failed for {searchResultUrl}", true, PluginDatabase.PluginName);
@@ -754,7 +802,7 @@ namespace SuccessStory.Clients
                 {
                     _bgFetchSemaphore.Release();
                 }
-            });
+            }, _bgFetchCts.Token);
         }
 
         private void CacheAndApplyImages(List<Achievement> parsed, string cacheKeyUrl, Game game)

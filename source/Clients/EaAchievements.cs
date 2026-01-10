@@ -25,11 +25,7 @@ namespace SuccessStory.Clients
 
         public EaAchievements() : base("EA", CodeLang.GetEaLang(API.Instance.ApplicationSettings.Language), CodeLang.GetCountryFromLast(API.Instance.ApplicationSettings.Language))
         {
-            // Null-safety: EaApi may not be initialized yet if called early in plugin lifecycle
-            if (EaApi != null)
-            {
-                EaApi.SetLanguage(API.Instance.ApplicationSettings.Language);
-            }
+            EaApi.SetLanguage(API.Instance.ApplicationSettings.Language);
         }
 
 
@@ -56,7 +52,7 @@ namespace SuccessStory.Clients
                             Description = x.Description,
                             UrlUnlocked = x.UrlUnlocked,
                             UrlLocked = x.UrlLocked,
-                            DateUnlocked = x.DateUnlocked == default(DateTime) ? (DateTime?)null : x.DateUnlocked,
+                            DateUnlocked = x.DateUnlocked,
                             Percent = x.Percent,
                             GamerScore = x.GamerScore
                         }).ToList();
