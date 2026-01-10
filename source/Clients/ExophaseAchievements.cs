@@ -62,6 +62,11 @@ namespace SuccessStory.Clients
             Timeout = TimeSpan.FromSeconds(15)
         };
 
+        // Cache expiration in days
+        private const int CACHE_EXPIRATION_DAYS = 7;
+        // Wait time in milliseconds for cookies to flush to disk
+        private const int COOKIE_FLUSH_WAIT_MS = 2000;
+
         static ExophaseAchievements()
         {
             _sharedHttpClient.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36");

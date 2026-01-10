@@ -182,8 +182,8 @@ namespace SuccessStory.Clients
 
         public override bool IsConnected()
         {
-            // Use Volatile.Read for proper memory barrier
-            if (Volatile.Read(ref CachedIsConnectedResult) == null)
+            // Check cached result
+            if (CachedIsConnectedResult == null)
             {
                 // Sync-over-async: We run the full async flow on a background thread to avoid deadlocks.
                 // Note: Calling .GetAwaiter().GetResult() from a thread with a synchronization context (like the UI thread)
@@ -207,8 +207,8 @@ namespace SuccessStory.Clients
                 await _isConnectedSemaphore.WaitAsync();
                 try
                 {
-                    // Double-check after acquiring lock with Volatile.Read
-                    if (Volatile.Read(ref CachedIsConnectedResult) == null)
+                    // Double-check after acquiring lock
+                    if (CachedIsConnectedResult == null)
                     {
                         bool isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
                         if (!isAuthenticated && File.Exists(XboxAccountClient.liveTokensPath))
@@ -222,8 +222,8 @@ namespace SuccessStory.Clients
                             Logger.Warn($"{ClientName} user is not authenticated");
                         }
 
-                        // Use Volatile.Write for proper memory barrier
-                        Volatile.Write(ref CachedIsConnectedResult, isAuthenticated);
+                        // Update cached result
+                        CachedIsConnectedResult = isAuthenticated;
                     }
                 }
                 finally
@@ -244,7 +244,7 @@ namespace SuccessStory.Clients
 
         #region Xbox
 
-        private string GetTitleId(Game game)
+        private async Task<string> GetTitleIdAsync(Game game)
         {
             string titleId = string.Empty;
             if (game.GameId?.StartsWith("CONSOLE_") == true)
@@ -262,38 +262,6 @@ namespace SuccessStory.Clients
                     {
                         return cachedTitleId;
                     }
-
-                    // The following code block was incorrectly placed here in the user's instruction.
-                    // It defines a property, which cannot be nested inside a method.
-                    // The instruction also mentioned "Update SourceLink to use async GetTitleIdAsync",
-                    // but the provided code snippet does not call an async method directly.
-                    // Assuming the intent was to define a SourceLink property elsewhere,
-                    // but since the instruction explicitly placed it here, and it's syntactically invalid,
-                    // I'm commenting it out to maintain a syntactically correct file based on the user's
-                    // provided context, while noting the issue.
-                    // If this property was meant to replace an existing one or be added at a class level,
-                    // please provide a more precise instruction for its placement.
-
-                    // public override string SourceLink
-                    // {
-                    //     get
-                    //     {
-                    //         try
-                    //         {
-                    //             if (CurrentGameAchievements?.Game != null)
-                    //             {
-                    //                 // Use cached title ID if available, otherwise return empty
-                    //                 // Full async fetch happens during GetAchievements
-                    //                 if (_titleIdCache.TryGetValue(CurrentGameAchievements.Game.GameId, out string titleId) && !string.IsNullOrEmpty(titleId))
-                    //                 {
-                    //                     return $"https://www.trueachievements.com/game/{titleId}/achievements";
-                    //                 }
-                    //             }
-                    //         }
-                    //         catch { }
-                    //         return string.Empty;
-                    //     }
-                    // }
 
                     var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId);
                     if (titleInfo != null && !string.IsNullOrEmpty(titleInfo.titleId))
@@ -314,6 +282,12 @@ namespace SuccessStory.Clients
                 Common.LogDebug(true, $"{ClientName} - name: {game.Name} - gameId: {game.GameId} - titleId: {titleId}");
             }
             return titleId;
+        }
+
+        private string GetTitleId(Game game)
+        {
+            // Synchronous wrapper for backward compatibility
+            return GetTitleIdAsync(game).GetAwaiter().GetResult();
         }
 
         private async Task<TContent> GetSerializedContentFromUrl<TContent>(string url, AuthorizationData authData, string contractVersion) where TContent : class
@@ -423,7 +397,7 @@ namespace SuccessStory.Clients
 
             Common.LogDebug(true, $"GetXboxAchievements() - name: {game.Name} - gameId: {game.GameId}");
             
-            string titleId = GetTitleId(game);
+            string titleId = await GetTitleIdAsync(game);
 
             string url = string.Format(AchievementsBaseUrl, xuid) + $"?titleId={titleId}&maxItems=1000";
             if (titleId.IsNullOrEmpty())
@@ -467,7 +441,7 @@ namespace SuccessStory.Clients
 
             Common.LogDebug(true, $"GetXbox360Achievements() - name: {game.Name} - gameId: {game.GameId}");
 
-            string titleId = GetTitleId(game);
+            string titleId = await GetTitleIdAsync(game);
 
             if (titleId.IsNullOrEmpty())
             {

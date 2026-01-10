@@ -46,12 +46,10 @@ namespace SuccessStory.Clients
 
                     if (originAchievements?.Count > 0)
                     {
-                        if (originAchievements?.Items != null)
-                        {
-                            originAchievements.Items = originAchievements.Items.Where(x => x.DateUnlocked != default(DateTime)).ToList();
-                        }
-
-                        AllAchievements = originAchievements.Select(x => new Achievement
+                        // Filter out achievements with default DateUnlocked and convert to List<Achievement>
+                        AllAchievements = originAchievements
+                            .Where(x => x.DateUnlocked != default(DateTime))
+                            .Select(x => new Achievement
                         {
                             ApiName = x.Id,
                             Name = x.Name,
