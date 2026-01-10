@@ -113,8 +113,25 @@ namespace SuccessStory.Clients
             return await GetAchievementsAsync(game, new SearchResult { Name = game.Name, Url = url });
         }
 
+        /// <summary>
+        /// Gets achievements for a game synchronously.
+        /// WARNING: This method uses sync-over-async and MUST only be called from background threads.
+        /// Use GetAchievementsAsync when possible to avoid deadlocks.
+        /// </summary>
+        /// <param name="game">The game to get achievements for</param>
+        /// <param name="searchResult">The search result containing the URL</param>
+        /// <returns>Game achievements</returns>
+        /// <exception cref="InvalidOperationException">Thrown if called from a thread with a synchronization context</exception>
         public GameAchievements GetAchievements(Game game, SearchResult searchResult)
         {
+            // Enforce background thread usage to prevent deadlocks
+            if (SynchronizationContext.Current != null)
+            {
+                throw new InvalidOperationException(
+                    "GetAchievements (sync) must be called from a background thread. " +
+                    "Use GetAchievementsAsync or wrap this call in Task.Run() to avoid deadlocks.");
+            }
+            
             // Synchronous wrapper for backward compatibility
             return GetAchievementsAsync(game, searchResult).GetAwaiter().GetResult();
         }
@@ -760,7 +777,7 @@ namespace SuccessStory.Clients
         }
 
 
-        private static readonly SemaphoreSlim _bgFetchSemaphore = new SemaphoreSlim(2);
+
 
         private void ScheduleBackgroundFetch(string fetchUrl, string searchResultUrl, Game game)
         {

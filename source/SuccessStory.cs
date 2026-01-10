@@ -1347,7 +1347,30 @@ namespace SuccessStory
         // Add code to be executed when Playnite is shutting down.
         public override void OnApplicationStopped(OnApplicationStoppedEventArgs args)
         {
-            TokenSource.Cancel();
+            // Stop the plugin if it is loaded.
+            if (PluginDatabase != null)
+            {
+                TokenSource.Cancel();
+                
+                // Cleanup static resources
+                try
+                {
+                    Clients.XboxAchievements.Cleanup();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Error during XboxAchievements cleanup", true, PluginDatabase.PluginName);
+                }
+                
+                try
+                {
+                    Clients.ExophaseAchievements.Cleanup();
+                }
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, "Error during ExophaseAchievements cleanup", true, PluginDatabase.PluginName);
+                }
+            }
         }
 
         #endregion

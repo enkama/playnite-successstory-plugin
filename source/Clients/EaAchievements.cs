@@ -42,9 +42,8 @@ namespace SuccessStory.Clients
 
                     if (originAchievements?.Count > 0)
                     {
-                        // Filter out achievements with default DateUnlocked and convert to List<Achievement>
+                        // Include all achievements (locked and unlocked)
                         AllAchievements = originAchievements
-                            .Where(x => x.DateUnlocked != default(DateTime))
                             .Select(x => new Achievement
                         {
                             ApiName = x.Id,
@@ -52,7 +51,7 @@ namespace SuccessStory.Clients
                             Description = x.Description,
                             UrlUnlocked = x.UrlUnlocked,
                             UrlLocked = x.UrlLocked,
-                            DateUnlocked = x.DateUnlocked,
+                            DateUnlocked = x.DateUnlocked == default(DateTime) ? (DateTime?)null : x.DateUnlocked,
                             Percent = x.Percent,
                             GamerScore = x.GamerScore
                         }).ToList();
@@ -331,13 +330,22 @@ namespace SuccessStory.Clients
 
                 if (!assigned && !achNorm.IsNullOrEmpty())
                 {
-                    var found = imagesNormalized.FirstOrDefault(x => achNorm.StartsWith(x.Key) || x.Key.StartsWith(achNorm) || achNorm.Contains(x.Key) || x.Key.Contains(achNorm));
-                    if (!found.Equals(default(KeyValuePair<string, string>)))
+                    const int MIN_FUZZY_LENGTH = 5; // Minimum length to avoid false positives from short common words
+                    
+                    // Only perform fuzzy matching if both names are long enough
+                    if (achNorm.Length >= MIN_FUZZY_LENGTH)
                     {
-                        ach.UrlUnlocked = found.Value;
-                        ach.UrlLocked = found.Value;
-                        assigned = true;
-                        Logger.Debug($"EA: Fuzzy matched '{ach.Name}' to image key '{found.Key}'");
+                        var found = imagesNormalized.FirstOrDefault(x => 
+                            x.Key.Length >= MIN_FUZZY_LENGTH && 
+                            (achNorm.StartsWith(x.Key) || x.Key.StartsWith(achNorm) || achNorm.Contains(x.Key) || x.Key.Contains(achNorm)));
+                        
+                        if (!found.Equals(default(KeyValuePair<string, string>)))
+                        {
+                            ach.UrlUnlocked = found.Value;
+                            ach.UrlLocked = found.Value;
+                            assigned = true;
+                            Logger.Debug($"EA: Fuzzy matched '{ach.Name}' to image key '{found.Key}'");
+                        }
                     }
                 }
 

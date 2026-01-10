@@ -24,10 +24,11 @@ namespace SuccessStory.Clients
     public class XboxAchievements : GenericAchievements, IDisposable
     {
         private static readonly object _initLock = new object();
+        private static readonly object _cacheLock = new object(); // For thread-safe cache operations
         private static readonly SemaphoreSlim _isConnectedSemaphore = new SemaphoreSlim(1, 1);
         private static readonly ConcurrentDictionary<string, string> _titleIdCache = new ConcurrentDictionary<string, string>();
         private static readonly int _titleIdCacheMaxSize = 500; // Prevent unbounded growth
-        private static readonly HttpClient _sharedHttpClient = new HttpClient();
+        private static readonly HttpClient _sharedHttpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
         protected static readonly Lazy<XboxAccountClient> xboxAccountClient = new Lazy<XboxAccountClient>(() => new XboxAccountClient(API.Instance, PluginDatabase.Paths.PluginUserDataPath + "\\..\\" + PlayniteTools.GetPluginId(ExternalPlugin.XboxLibrary)));
         internal static XboxAccountClient XboxAccountClient => xboxAccountClient.Value;
 
@@ -111,11 +112,21 @@ namespace SuccessStory.Clients
             // Set source link AFTER populating Items
             if (gameAchievements.HasAchievements)
             {
+                // Use cached title ID if available, otherwise use empty string
+                // Full async fetch happens during GetXboxAchievements
+                string titleId = string.Empty;
+                if (game.GameId != null && _titleIdCache.TryGetValue(game.GameId, out string cachedTitleId))
+                {
+                    titleId = cachedTitleId;
+                }
+                
                 gameAchievements.SourcesLink = new SourceLink
                 {
                     GameName = game.Name,
                     Name = "Xbox",
-                    Url = $"https://account.xbox.com/{LocalLang}/GameInfoHub?titleid={GetTitleId(game)}&selectedTab=achievementsTab&activetab=main:mainTab2"
+                    Url = !string.IsNullOrEmpty(titleId) 
+                        ? $"https://account.xbox.com/{LocalLang}/GameInfoHub?titleid={titleId}&selectedTab=achievementsTab&activetab=main:mainTab2"
+                        : $"https://account.xbox.com/{LocalLang}/Profile"
                 };
             }
 
@@ -266,11 +277,14 @@ namespace SuccessStory.Clients
                     var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId);
                     if (titleInfo != null && !string.IsNullOrEmpty(titleInfo.titleId))
                     {
-                        // Check cache size and clear if too large (simple bounded cache)
-                        if (_titleIdCache.Count >= _titleIdCacheMaxSize)
+                        // Thread-safe cache size check and clear
+                        lock (_cacheLock)
                         {
-                            Logger.Debug($"Xbox title ID cache size limit reached ({_titleIdCacheMaxSize}), clearing cache");
-                            _titleIdCache.Clear();
+                            if (_titleIdCache.Count >= _titleIdCacheMaxSize)
+                            {
+                                Logger.Debug($"Xbox title ID cache size limit reached ({_titleIdCacheMaxSize}), clearing cache");
+                                _titleIdCache.Clear();
+                            }
                         }
                         
                         _titleIdCache.TryAdd(game.GameId, titleInfo.titleId);
@@ -291,11 +305,7 @@ namespace SuccessStory.Clients
             return titleId;
         }
 
-        private string GetTitleId(Game game)
-        {
-            // Synchronous wrapper for backward compatibility
-            return GetTitleIdAsync(game).GetAwaiter().GetResult();
-        }
+
 
         private async Task<TContent> GetSerializedContentFromUrl<TContent>(string url, AuthorizationData authData, string contractVersion) where TContent : class
         {
@@ -560,7 +570,7 @@ namespace SuccessStory.Clients
                 }
                 catch (Exception ex)
                 {
-                    Common.LogError(ex, false, "Failed to dispose HttpClient");
+                    Common.LogError(ex, false, true, PluginDatabase.PluginName);
                 }
                 
                 try
@@ -569,7 +579,7 @@ namespace SuccessStory.Clients
                 }
                 catch (Exception ex)
                 {
-                    Common.LogError(ex, false, "Failed to clear title ID cache");
+                    Common.LogError(ex, false, true, PluginDatabase.PluginName);
                 }
             }
         }
