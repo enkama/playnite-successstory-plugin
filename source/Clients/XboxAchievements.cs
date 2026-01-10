@@ -141,7 +141,7 @@ namespace SuccessStory.Clients
                     }
                     else
                     {
-                        Logger.Warn("Exophase not connected or unavailable - skipping rarity fetch for Xbox achievements.");
+                        Logger.Debug("Exophase not connected or unavailable - skipping rarity fetch for Xbox achievements.");
                     }
                 }
                 catch (Exception ex)
@@ -193,6 +193,12 @@ namespace SuccessStory.Clients
 
         public override bool IsConnected()
         {
+            // Short-circuit if disposed
+            if (Interlocked.CompareExchange(ref _disposed, 0, 0) == 1)
+            {
+                return false;
+            }
+            
             // Check cached result
             if (CachedIsConnectedResult == null)
             {
@@ -203,7 +209,22 @@ namespace SuccessStory.Clients
                 {
                     if (CachedIsConnectedResult == null)
                     {
-                        CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+                        try
+                        {
+                            CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            // Disposed during execution
+                            CachedIsConnectedResult = false;
+                            return false;
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Cancelled during execution
+                            CachedIsConnectedResult = false;
+                            return false;
+                        }
                     }
                 }
             }
@@ -213,9 +234,24 @@ namespace SuccessStory.Clients
 
         public override async Task<bool> IsConnectedAsync()
         {
+            // Short-circuit if disposed
+            if (Interlocked.CompareExchange(ref _disposed, 0, 0) == 1)
+            {
+                return false;
+            }
+            
             if (CachedIsConnectedResult == null)
             {
-                await _isConnectedSemaphore.WaitAsync();
+                try
+                {
+                    await _isConnectedSemaphore.WaitAsync();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Semaphore disposed
+                    return false;
+                }
+                
                 try
                 {
                     // Double-check after acquiring lock
@@ -237,9 +273,22 @@ namespace SuccessStory.Clients
                         CachedIsConnectedResult = isAuthenticated;
                     }
                 }
+                catch (ObjectDisposedException)
+                {
+                    // Disposed during execution
+                    CachedIsConnectedResult = false;
+                    return false;
+                }
                 finally
                 {
-                    _isConnectedSemaphore.Release();
+                    try
+                    {
+                        _isConnectedSemaphore.Release();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Already disposed, ignore
+                    }
                 }
             }
 

@@ -1364,11 +1364,11 @@ namespace SuccessStory
                 
                 try
                 {
-                    Clients.ExophaseAchievements.Cleanup();
+                    Clients.ExophaseAchievements.Shutdown();
                 }
                 catch (Exception ex)
                 {
-                    Common.LogError(ex, false, "Error during ExophaseAchievements cleanup", true, PluginDatabase.PluginName);
+                    Common.LogError(ex, false, "Error during ExophaseAchievements shutdown", true, PluginDatabase.PluginName);
                 }
             }
         }

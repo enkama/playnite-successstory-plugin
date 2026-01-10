@@ -89,10 +89,11 @@ namespace SuccessStory.Clients
 
         private static string GenerateCacheKey(string url)
         {
-            string cacheKey = Regex.Replace(url ?? string.Empty, "[^a-zA-Z0-9_-]", "_");
+            string safeUrl = url ?? string.Empty;
+            string cacheKey = Regex.Replace(safeUrl, "[^a-zA-Z0-9_-]", "_");
             if (cacheKey.Length > 100)
             {
-                cacheKey = url.MD5();
+                cacheKey = safeUrl.MD5();
             }
             return cacheKey;
         }
@@ -306,7 +307,7 @@ namespace SuccessStory.Clients
                 {
                      try
                      {
-                         dataExophaseLocalised = Web.DownloadStringData(fetchUrl).GetAwaiter().GetResult();
+                         dataExophaseLocalised = await Web.DownloadStringData(fetchUrl);
                      }
                      catch (Exception ex)
                      {
@@ -331,7 +332,8 @@ namespace SuccessStory.Clients
                     {
                         var cacheDir = GetCacheDirectory();
                         if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
-                        string cacheKey = GenerateCacheKey(searchResult.Url);
+                        // Use the same normalized URL for cache key as used in reads
+                        string cacheKey = GenerateCacheKey(cacheKeyUrl);
                         string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
                         File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
                         Services.AchievementImageResolver.RegisterImages(game, imagesDict);
@@ -899,5 +901,55 @@ namespace SuccessStory.Clients
                 }
             }
         }
+
+
+        #region Shutdown
+
+        /// <summary>
+        /// Shutdown method to cancel background tasks and dispose resources. Should be called when plugin unloads.
+        /// </summary>
+        public static void Shutdown()
+        {
+            try
+            {
+                _bgFetchCts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, ignore
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Error cancelling background fetch tasks: {ex.Message}");
+            }
+            
+            try
+            {
+                _bgFetchCts?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, ignore
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Error disposing cancellation token source: {ex.Message}");
+            }
+            
+            try
+            {
+                _bgFetchSemaphore?.Dispose();
+            }
+            catch (ObjectDisposedException)
+            {
+                // Already disposed, ignore
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Error disposing semaphore: {ex.Message}");
+            }
+        }
+
+        #endregion
     }
 }

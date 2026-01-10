@@ -302,59 +302,28 @@ namespace SuccessStory.Clients
                     assigned = true;
                 }
 
-                // Try Contains match (with minimum length to avoid false positives like "go" matching "dragon")
-                if (!assigned && achNorm.Length >= 4)
+                // Try Contains match and fuzzy bidirectional matching (consolidated)
+                if (!assigned && achNorm.Length >= 5) // Minimum length to avoid false positives
                 {
-                    foreach (var kv in imagesNormalized)
+                    var found = imagesNormalized.FirstOrDefault(x => 
+                        x.Key.Length >= 5 && 
+                        (x.Key.Contains(achNorm) || achNorm.Contains(x.Key) || 
+                         achNorm.StartsWith(x.Key) || x.Key.StartsWith(achNorm)));
+                    
+                    if (!found.Equals(default(KeyValuePair<string, string>)))
                     {
-                        if (kv.Key.Contains(achNorm))
-                        {
-                            ach.UrlUnlocked = kv.Value;
-                            ach.UrlLocked = kv.Value;
-                            assigned = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!assigned)
-                {
-                    string apiNorm = Normalize(ach.ApiName);
-                    if (!apiNorm.IsNullOrEmpty() && imagesNormalized.TryGetValue(apiNorm, out string imgUrl))
-                    {
-                        ach.UrlUnlocked = imgUrl;
-                        ach.UrlLocked = imgUrl;
+                        ach.UrlUnlocked = found.Value;
+                        ach.UrlLocked = found.Value;
                         assigned = true;
+                        Logger.Debug($"EA: Fuzzy matched '{ach.Name}' to image key '{found.Key}'");
                     }
                 }
 
+                // Word overlap matching - use pre-computed word sets and reuse normalized value
                 if (!assigned && !achNorm.IsNullOrEmpty())
                 {
-                    const int MIN_FUZZY_LENGTH = 5; // Minimum length to avoid false positives from short common words
-                    
-                    // Only perform fuzzy matching if both names are long enough
-                    if (achNorm.Length >= MIN_FUZZY_LENGTH)
-                    {
-                        var found = imagesNormalized.FirstOrDefault(x => 
-                            x.Key.Length >= MIN_FUZZY_LENGTH && 
-                            (achNorm.StartsWith(x.Key) || x.Key.StartsWith(achNorm) || achNorm.Contains(x.Key) || x.Key.Contains(achNorm)));
-                        
-                        if (!found.Equals(default(KeyValuePair<string, string>)))
-                        {
-                            ach.UrlUnlocked = found.Value;
-                            ach.UrlLocked = found.Value;
-                            assigned = true;
-                            Logger.Debug($"EA: Fuzzy matched '{ach.Name}' to image key '{found.Key}'");
-                        }
-                    }
-                }
-
-                // Word overlap matching - use pre-computed word sets
-                if (!assigned && !ach.Name.IsNullOrEmpty())
-                {
-                    string achNormForWords = ach.Name.RemoveDiacritics().Trim().ToLowerInvariant();
-                    achNormForWords = Regex.Replace(achNormForWords, @"[^a-z0-9\s]", "");
-                    var achWords = achNormForWords.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                    // Extract words from already-normalized achievement name
+                    var achWords = achNorm.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
                         .Where(w => w.Length > 2).ToList();
 
                     if (achWords.Count > 0)
