@@ -70,7 +70,8 @@ namespace SuccessStory.Clients
         private const int COOKIE_FLUSH_MAX_RETRIES = 3;
 
         private static readonly SemaphoreSlim _bgFetchSemaphore = new SemaphoreSlim(2);
-        private static readonly CancellationTokenSource _bgFetchCts = new CancellationTokenSource();
+        private static CancellationTokenSource _bgFetchCts = new CancellationTokenSource();
+        private static readonly object _bgFetchCtsLock = new object();
 
         static ExophaseAchievements()
         {
@@ -324,19 +325,31 @@ namespace SuccessStory.Clients
                 List<Achievement> All = ParseData(dataExophase);
                 List<Achievement> AllLocalised = dataExophaseLocalised.IsNullOrEmpty() ? new List<Achievement>() : ParseData(dataExophaseLocalised);
 
-                // After parsing, cache images to disk for future runs
+                // After parsing, cache achievements to disk for future runs (using canonical format)
                 try
                 {
-                    var imagesDict = All.Where(a => !a.Name.IsNullOrEmpty() && !a.UrlUnlocked.IsNullOrEmpty()).ToDictionary(a => a.Name, a => a.UrlUnlocked);
-                    if (imagesDict.Count > 0)
+                    // Build canonical cache format: Dictionary<string, Achievement>
+                    var achievementsDict = All.Where(a => !a.Name.IsNullOrEmpty())
+                        .GroupBy(a => a.Name)
+                        .ToDictionary(g => g.Key, g => g.First());
+                    
+                    if (achievementsDict.Count > 0)
                     {
                         var cacheDir = GetCacheDirectory();
                         if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
                         // Use the same normalized URL for cache key as used in reads
                         string cacheKey = GenerateCacheKey(cacheKeyUrl);
                         string cacheFile = Path.Combine(cacheDir, cacheKey + ".json");
-                        File.WriteAllText(cacheFile, Serialization.ToJson(imagesDict));
-                        Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+                        File.WriteAllText(cacheFile, Serialization.ToJson(achievementsDict));
+                        
+                        // Register images separately (requires name->url map)
+                        var imagesDict = achievementsDict
+                            .Where(kv => !kv.Value.UrlUnlocked.IsNullOrEmpty())
+                            .ToDictionary(kv => kv.Key, kv => kv.Value.UrlUnlocked);
+                        if (imagesDict.Count > 0)
+                        {
+                            Services.AchievementImageResolver.RegisterImages(game, imagesDict);
+                        }
                     }
                 }
                 catch (Exception exCache)
@@ -785,19 +798,35 @@ namespace SuccessStory.Clients
         {
             Task.Run(async () =>
             {
+                CancellationToken token;
+                lock (_bgFetchCtsLock)
+                {
+                    if (_bgFetchCts == null || _bgFetchCts.IsCancellationRequested)
+                    {
+                        Logger.Debug($"Exophase background fetch skipped - shutdown in progress or completed");
+                        return;
+                    }
+                    token = _bgFetchCts.Token;
+                }
+                
                 try
                 {
-                    await _bgFetchSemaphore.WaitAsync(_bgFetchCts.Token);
+                    await _bgFetchSemaphore.WaitAsync(token);
                 }
                 catch (OperationCanceledException)
                 {
                     Logger.Debug($"Exophase background fetch cancelled before starting for {searchResultUrl}");
                     return;
                 }
+                catch (ObjectDisposedException)
+                {
+                    Logger.Debug($"Exophase background fetch semaphore disposed");
+                    return;
+                }
                 
                 try
                 {
-                    _bgFetchCts.Token.ThrowIfCancellationRequested();
+                    token.ThrowIfCancellationRequested();
                     
                     var webDataBg = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
                     if (webDataBg.Item1.IsNullOrEmpty())
@@ -819,9 +848,16 @@ namespace SuccessStory.Clients
                 }
                 finally
                 {
-                    _bgFetchSemaphore.Release();
+                    try
+                    {
+                        _bgFetchSemaphore.Release();
+                    }
+                    catch (ObjectDisposedException)
+                    {
+                        // Already disposed, ignore
+                    }
                 }
-            }, _bgFetchCts.Token);
+            });
         }
 
         private void CacheAndApplyImages(List<Achievement> parsed, string cacheKeyUrl, Game game)
@@ -910,30 +946,43 @@ namespace SuccessStory.Clients
         /// </summary>
         public static void Shutdown()
         {
-            try
+            lock (_bgFetchCtsLock)
             {
-                _bgFetchCts?.Cancel();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Already disposed, ignore
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Error cancelling background fetch tasks: {ex.Message}");
-            }
-            
-            try
-            {
-                _bgFetchCts?.Dispose();
-            }
-            catch (ObjectDisposedException)
-            {
-                // Already disposed, ignore
-            }
-            catch (Exception ex)
-            {
-                Logger.Warn($"Error disposing cancellation token source: {ex.Message}");
+                try
+                {
+                    _bgFetchCts?.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed, ignore
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Error cancelling background fetch tasks: {ex.Message}");
+                }
+                
+                try
+                {
+                    _bgFetchCts?.Dispose();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Already disposed, ignore
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Error disposing cancellation token source: {ex.Message}");
+                }
+                
+                // Recreate for potential reuse (though typically shutdown is final)
+                try
+                {
+                    _bgFetchCts = new CancellationTokenSource();
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"Error recreating cancellation token source: {ex.Message}");
+                }
             }
             
             try

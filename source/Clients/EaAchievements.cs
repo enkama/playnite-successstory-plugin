@@ -336,6 +336,7 @@ namespace SuccessStory.Clients
                                 ach.UrlUnlocked = imagesNormalized[kv.Key];
                                 ach.UrlLocked = imagesNormalized[kv.Key];
                                 assigned = true;
+                                Logger.Debug($"EA: Word overlap matched '{ach.Name}' to image key (overlap: {overlap}/{achWords.Count})");
                                 break;
                             }
                         }
