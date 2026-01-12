@@ -70,7 +70,7 @@ namespace SuccessStory.Clients
                                 Url = "https://www.ea.com"
                             };
 
-                            if (gameAchievements.Items == null || gameAchievements.Items.All(x => x.UrlUnlocked.IsNullOrEmpty()))
+                            if (gameAchievements.Items == null || gameAchievements.Items.Any(x => x.UrlUnlocked.IsNullOrEmpty()))
                             {
                                 var images = FetchExternalImages(game);
                                 if (images.Count > 0)
@@ -200,7 +200,7 @@ namespace SuccessStory.Clients
                         {
                             string exUrl = exMatch.Url;
                             if (exUrl.StartsWith("/")) exUrl = "https://www.exophase.com" + exUrl;
-                            var exAch = SuccessStory.ExophaseAchievements.GetAchievements(game, exUrl);
+                            var exAch = Task.Run(() => SuccessStory.ExophaseAchievements.GetAchievements(game, exUrl)).GetAwaiter().GetResult();
                             if (exAch?.Items?.Count > 0)
                             {
                                 string exBase = "https://www.exophase.com";

@@ -186,7 +186,7 @@ namespace SuccessStory.Clients
                             }
                             catch (Exception ex)
                             {
-                                Logger.Debug($"Exophase cache deserialization failed, trying old format: {ex.Message}");
+                                Logger.Warn($"Exophase cache deserialization failed, trying old format (may result in incomplete data): {ex.Message}");
                                 var cachedOld = Serialization.FromJson<Dictionary<string, string>>(jsonCache);
                                 if (cachedOld != null && cachedOld.Count > 0)
                                 {
@@ -216,8 +216,9 @@ namespace SuccessStory.Clients
                             dataExophase = webData.Item1;
                         }
                     }
-                    catch (Exception)
+                    catch (Exception exWebView)
                     {
+                        Logger.Debug($"Exophase WebView fetch failed, falling back to HTTP: {exWebView.Message}");
                         // WebView fetch failed; fall back to HTTP methods
                     }
 
@@ -256,7 +257,7 @@ namespace SuccessStory.Clients
                             Common.LogError(ex, false, $"Exophase HTTP fetch failed for {searchResult.Url}, scheduling background WebView fetch", true, PluginDatabase.PluginName);
 
                             // Background fetch: parse, cache and register images without blocking
-                            ScheduleBackgroundFetch(fetchUrl, searchResult.Url, game);
+                            ScheduleBackgroundFetch(fetchUrl, cacheKeyUrl, game);
 
                             dataExophase = string.Empty;
                         }
@@ -985,6 +986,8 @@ namespace SuccessStory.Clients
                 }
             }
             
+            // Do not dispose semaphore as it is static and reused across reloads
+            /*
             try
             {
                 _bgFetchSemaphore?.Dispose();
@@ -997,6 +1000,7 @@ namespace SuccessStory.Clients
             {
                 Logger.Warn($"Error disposing semaphore: {ex.Message}");
             }
+            */
         }
 
         #endregion

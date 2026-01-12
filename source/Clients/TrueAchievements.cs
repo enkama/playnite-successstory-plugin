@@ -376,8 +376,9 @@ namespace SuccessStory.Clients
                                         name = Path.GetFileNameWithoutExtension(imgUrl);
                                     }
                                 }
-                                catch
+                                catch (Exception ex)
                                 {
+                                    Logger.Debug($"GetDataImages: Error extracting filename from {imgUrl}: {ex.Message}");
                                     // Final fallback: use deterministic default
                                     name = $"image_{index}";
                                 }
