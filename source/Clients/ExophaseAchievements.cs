@@ -953,9 +953,9 @@ namespace SuccessStory.Clients
                 {
                     _bgFetchCts?.Cancel();
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException ex)
                 {
-                    // Already disposed, ignore
+                    Logger.Debug($"Background fetch cancel: {ex.Message}");
                 }
                 catch (Exception ex)
                 {
@@ -966,9 +966,9 @@ namespace SuccessStory.Clients
                 {
                     _bgFetchCts?.Dispose();
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException ex)
                 {
-                    // Already disposed, ignore
+                    Logger.Debug($"Background fetch dispose: {ex.Message}");
                 }
                 catch (Exception ex)
                 {
