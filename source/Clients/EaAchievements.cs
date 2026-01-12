@@ -12,6 +12,8 @@ using System.Linq;
 using Playnite.SDK;
 using CommonPluginsShared.Extensions;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace SuccessStory.Clients
 {
