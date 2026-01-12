@@ -59,7 +59,7 @@ namespace SuccessStory.Clients
             try
             {
                 Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(url).GetAwaiter().GetResult();
+                var sourceData = Web.DownloadSourceDataWebView(url, null, false, null, true, true, "#oSearchResults, .info, .main, #main").GetAwaiter().GetResult();
                 sw.Stop();
                 Logger.Debug($"SearchGame web request took {sw.ElapsedMilliseconds}ms for {url}");
 
@@ -152,7 +152,7 @@ namespace SuccessStory.Clients
             try
             {
                 Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(urlTrueAchievement).GetAwaiter().GetResult();
+                var sourceData = Web.DownloadSourceDataWebView(urlTrueAchievement, null, false, null, true, true, ".game, .main, #main").GetAwaiter().GetResult();
                 sw.Stop();
                 Logger.Debug($"GetEstimateTimeToUnlock web request took {sw.ElapsedMilliseconds}ms for {urlTrueAchievement}");
 
@@ -238,7 +238,7 @@ namespace SuccessStory.Clients
             try
             {
                 Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(gameUrl).GetAwaiter().GetResult();
+                var sourceData = Web.DownloadSourceDataWebView(gameUrl, null, false, null, true, true, ".achievement, .achievements, .achievement-list, #achievements, .main, #main").GetAwaiter().GetResult();
                 sw.Stop();
                 Logger.Debug($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl.Substring(0, Math.Min(100, gameUrl.Length))}{(gameUrl.Length > 100 ? "..." : "")}");
                 
