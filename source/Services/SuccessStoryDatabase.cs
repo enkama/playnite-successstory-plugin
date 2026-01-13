@@ -1006,7 +1006,7 @@ namespace SuccessStory.Services
                                 // Update progress text (non-blocking)
                                 API.Instance.MainView.UIDispatcher.BeginInvoke((Action)(() =>
                                 {
-                                    a.Text = ResourceProvider.GetString("LOCSuccessStoryGettingAchievements")
+                                    a.Text = ResourceProvider.GetString("LOCCommonProcessing")
                                         + "\n" + game.Name + (game.Source == null ? string.Empty : $" ({game.Source.Name})");
                                 }));
 

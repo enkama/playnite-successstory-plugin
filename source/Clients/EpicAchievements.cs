@@ -43,14 +43,15 @@ namespace SuccessStory.Clients
                     Logger.Debug($"Epic.GetAssets took {swAssets.ElapsedMilliseconds}ms");
 
                     var asset = assets.FirstOrDefault(x => x.AppName.IsEqual(game.GameId));
+                    string targetNamespace = asset?.Namespace ?? game.GameId;
+
                     if (asset == null)
                     {
-                        Logger.Warn($"No asset for the Epic game {game.Name}");
-                        return gameAchievements;
+                        Logger.Warn($"No asset for the Epic game {game.Name}. Using GameId {game.GameId} as namespace.");
                     }
 
                     var swAch = Stopwatch.StartNew();
-                    ObservableCollection<GameAchievement> epicAchievements = EpicApi.GetAchievements(asset.Namespace, EpicApi.CurrentAccountInfos);
+                    ObservableCollection<GameAchievement> epicAchievements = EpicApi.GetAchievements(targetNamespace, EpicApi.CurrentAccountInfos);
                     swAch.Stop();
                     Logger.Debug($"Epic.GetAchievements API call took {swAch.ElapsedMilliseconds}ms");
                     if (epicAchievements?.Count > 0)
