@@ -175,9 +175,13 @@ namespace SuccessStory.Clients
 
                                 if (taSearch?.Count > 0)
                                 {
-                                    var bestMatch = taSearch.OrderByDescending(x => Fuzz.TokenSetRatio(game.Name.ToLower(), x.Name.ToLower())).FirstOrDefault();
-                                    if (bestMatch != null && bestMatch.Score >= 80)
+                                    var scored = taSearch.Select(x => new { Item = x, Score = Fuzz.TokenSetRatio(game.Name.ToLower(), x.GameName.ToLower()) })
+                                        .OrderByDescending(x => x.Score)
+                                        .FirstOrDefault();
+
+                                    if (scored != null && scored.Score >= 80)
                                     {
+                                        var bestMatch = scored.Item;
                                         var images = TrueAchievements.GetDataImages(bestMatch.GameUrl);
                                         if (images?.Count > 0)
                                         {
@@ -191,7 +195,7 @@ namespace SuccessStory.Clients
                                             }).ToList();
 
                                             gameAchievements.Items = AllAchievements;
-                                            gameAchievements.SourcesLink = new SourceLink { GameName = bestMatch.Name, Name = "TrueAchievements", Url = bestMatch.GameUrl };
+                                            gameAchievements.SourcesLink = new SourceLink { GameName = bestMatch.GameName, Name = "TrueAchievements", Url = bestMatch.GameUrl };
                                             Logger.Info($"Epic.GetAchievements: found {AllAchievements.Count} achievements on TrueAchievements for {game.Name}");
                                         }
                                     }

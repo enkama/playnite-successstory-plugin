@@ -60,7 +60,7 @@ namespace SuccessStory
 
         #endregion
 
-        public SuccessStory(IPlayniteAPI api) : base(api)
+        public SuccessStory(IPlayniteAPI api) : base(api, "SuccessStory")
         {
             // Manual dll load
             try
