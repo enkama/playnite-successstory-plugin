@@ -933,7 +933,7 @@ namespace SuccessStory.Services
                 {
                     if (webItem.HasAchievements)
                     {
-                        webItem = SetEstimateTimeToUnlock(game, webItem);
+                        webItem = SetEstimateTimeToUnlockAsync(game, webItem, cancellationToken).GetAwaiter().GetResult();
                     }
                     Update(webItem);
                 }

@@ -230,6 +230,9 @@ namespace SuccessStory.Clients
 
             gameAchievements.SetRaretyIndicator();
             PluginDatabase.AddOrUpdate(gameAchievements);
+
+            swOverall.Stop();
+            Logger.Info($"Epic.GetAchievements STOP - {game.Name} - {swOverall.ElapsedMilliseconds}ms");
             return gameAchievements;
         }
 

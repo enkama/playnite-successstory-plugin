@@ -101,7 +101,10 @@ namespace SuccessStory.Clients
             }
 
             gameAchievements.SetRaretyIndicator();
-            PluginDatabase.AddOrUpdate(gameAchievements);
+            if (gameAchievements.HasAchievements)
+            {
+                PluginDatabase.AddOrUpdate(gameAchievements);
+            }
             return gameAchievements;
         }
 
