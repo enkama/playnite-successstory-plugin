@@ -37,10 +37,7 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    var swAssets = Stopwatch.StartNew();
                     var assets = EpicApi.GetAssets();
-                    swAssets.Stop();
-                    Logger.Debug($"Epic.GetAssets took {swAssets.ElapsedMilliseconds}ms");
 
                     var asset = assets.FirstOrDefault(x => x.AppName.IsEqual(game.GameId));
                     string targetNamespace = asset?.Namespace ?? game.GameId;
@@ -50,10 +47,7 @@ namespace SuccessStory.Clients
                         Logger.Warn($"No asset for the Epic game {game.Name}. Using GameId {game.GameId} as namespace.");
                     }
 
-                    var swAch = Stopwatch.StartNew();
-                    ObservableCollection<GameAchievement> epicAchievements = EpicApi.GetAchievements(targetNamespace, EpicApi.CurrentAccountInfos);
-                    swAch.Stop();
-                    Logger.Debug($"Epic.GetAchievements API call took {swAch.ElapsedMilliseconds}ms");
+                    var epicAchievements = EpicApi.GetAchievements(targetNamespace, EpicApi.CurrentAccountInfos);
                     if (epicAchievements?.Count > 0)
                     {
                         AllAchievements = epicAchievements.Select(x => new Achievement
@@ -142,7 +136,7 @@ namespace SuccessStory.Clients
                                             Name = x.Name,
                                             Description = x.Description,
                                             UrlUnlocked = x.UrlUnlocked,
-                                            UrlLocked = x.UrlUnlocked,
+                                            UrlLocked = x.UrlLocked,
                                             DateUnlocked = x.DateUnlocked,
                                             Percent = x.Percent,
                                             GamerScore = x.GamerScore
@@ -166,20 +160,57 @@ namespace SuccessStory.Clients
                         {
                             Common.LogError(ex, false, "Error while using Exophase fallback for Epic achievements", true, PluginDatabase.PluginName);
                         }
+
+                        // 3) Final Fallback: Try TrueAchievements (Xbox/Steam origin) if Exophase yields no results or fails
+                        if (!gameAchievements.HasData)
+                        {
+                            try
+                            {
+                                Logger.Info($"Epic.GetAchievements: trying TrueAchievements fallback for {game.Name}");
+                                var taSearch = TrueAchievements.SearchGame(game, TrueAchievements.OriginData.Xbox);
+                                if (taSearch == null || taSearch.Count == 0)
+                                {
+                                    taSearch = TrueAchievements.SearchGame(game, TrueAchievements.OriginData.Steam);
+                                }
+
+                                if (taSearch?.Count > 0)
+                                {
+                                    var bestMatch = taSearch.OrderByDescending(x => Fuzz.TokenSetRatio(game.Name.ToLower(), x.Name.ToLower())).FirstOrDefault();
+                                    if (bestMatch != null && bestMatch.Score >= 80)
+                                    {
+                                        var images = TrueAchievements.GetDataImages(bestMatch.GameUrl);
+                                        if (images?.Count > 0)
+                                        {
+                                            AllAchievements = images.Select(x => new Achievement
+                                            {
+                                                ApiName = x.Key,
+                                                Name = x.Key,
+                                                UrlUnlocked = x.Value,
+                                                UrlLocked = x.Value,
+                                                Percent = 0
+                                            }).ToList();
+
+                                            gameAchievements.Items = AllAchievements;
+                                            gameAchievements.SourcesLink = new SourceLink { GameName = bestMatch.Name, Name = "TrueAchievements", Url = bestMatch.GameUrl };
+                                            Logger.Info($"Epic.GetAchievements: found {AllAchievements.Count} achievements on TrueAchievements for {game.Name}");
+                                        }
+                                    }
+                                }
+                            }
+                            catch (Exception exTa)
+                            {
+                                Common.LogError(exTa, false, "Error while using TrueAchievements fallback for Epic achievements", true, PluginDatabase.PluginName);
+                            }
+                        }
                     }
 
                     // Set source link
                     if (gameAchievements.HasAchievements && gameAchievements.SourcesLink == null)
                     {
                         var swSlug = Stopwatch.StartNew();
-                        string productSlug = EpicApi.GetProductSlug(asset.Namespace);
+                        string productSlug = EpicApi.GetProductSlug(targetNamespace);
                         swSlug.Stop();
-                        Logger.Debug($"Epic.GetProductSlug took {swSlug.ElapsedMilliseconds}ms");
-
-                        var swLink = Stopwatch.StartNew();
                         gameAchievements.SourcesLink = EpicApi.GetAchievementsSourceLink(game.Name, productSlug, EpicApi.CurrentAccountInfos);
-                        swLink.Stop();
-                        Logger.Debug($"Epic.GetAchievementsSourceLink took {swLink.ElapsedMilliseconds}ms");
                     }
                 }
                 catch (Exception ex)
@@ -195,8 +226,6 @@ namespace SuccessStory.Clients
 
             gameAchievements.SetRaretyIndicator();
             PluginDatabase.AddOrUpdate(gameAchievements);
-            swOverall.Stop();
-            Logger.Info($"Epic.GetAchievements execution took {swOverall.ElapsedMilliseconds}ms");
             return gameAchievements;
         }
 

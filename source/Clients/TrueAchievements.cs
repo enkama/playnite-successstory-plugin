@@ -13,6 +13,7 @@ using System.Linq;
 using System.Net;
 using System.Text.RegularExpressions;
 using System.IO;
+using System.Threading.Tasks;
 
 namespace SuccessStory.Clients
 {
@@ -39,6 +40,14 @@ namespace SuccessStory.Clients
         /// <returns></returns>
         public static List<TrueAchievementSearch> SearchGame(Game game, OriginData originData)
         {
+            return SearchGameAsync(game, originData).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Search list game on truesteamachievements or trueachievements asynchronously.
+        /// </summary>
+        public static async Task<List<TrueAchievementSearch>> SearchGameAsync(Game game, OriginData originData)
+        {
             List<TrueAchievementSearch> listSearchGames = new List<TrueAchievementSearch>();
             string url;
             string urlBase;
@@ -58,10 +67,7 @@ namespace SuccessStory.Clients
 
             try
             {
-                Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(url, null, false, null, true, true, "#oSearchResults, .info, .main, #main").GetAwaiter().GetResult();
-                sw.Stop();
-                Logger.Debug($"SearchGame web request took {sw.ElapsedMilliseconds}ms for {url}");
+                var sourceData = await Web.DownloadSourceDataWebView(url, null, false, null, true, true, "#oSearchResults, .info, .main, #main");
 
                 string response = sourceData.Item1;
 
@@ -83,14 +89,22 @@ namespace SuccessStory.Clients
                 if (SectionGames == null)
                 {
                     string gameUrl = htmlDocument.QuerySelector("link[rel=\"canonical\"]")?.GetAttribute("href");
+                    if (gameUrl.IsNullOrEmpty())
+                    {
+                        gameUrl = htmlDocument.QuerySelector("meta[property=\"og:url\"]")?.GetAttribute("content");
+                    }
+
                     string gameImage = htmlDocument.QuerySelector("div.info img")?.GetAttribute("src");
 
-                    listSearchGames.Add(new TrueAchievementSearch
+                    if (!gameUrl.IsNullOrEmpty())
                     {
-                        GameUrl = gameUrl,
-                        GameName = game.Name,
-                        GameImage = gameImage
-                    });
+                        listSearchGames.Add(new TrueAchievementSearch
+                        {
+                            GameUrl = gameUrl,
+                            GameName = game.Name,
+                            GameImage = gameImage
+                        });
+                    }
                 }
                 else
                 {
@@ -102,7 +116,7 @@ namespace SuccessStory.Clients
                             if (gameInfos.Count() > 2)
                             {
                                 string gameUrl = urlBase + gameInfos[0].QuerySelector("a")?.GetAttribute("href");
-                                string gameName = gameInfos[1].QuerySelector("a")?.InnerHtml;
+                                string gameName = gameInfos[1].QuerySelector("a")?.InnerHtml?.HtmlDecode();
                                 string gameImage = urlBase + gameInfos[0].QuerySelector("a img")?.GetAttribute("src");
 
                                 string itemType = gameInfos[2].InnerHtml;
@@ -141,6 +155,14 @@ namespace SuccessStory.Clients
         /// <returns></returns>
         public static EstimateTimeToUnlock GetEstimateTimeToUnlock(string urlTrueAchievement)
         {
+            return GetEstimateTimeToUnlockAsync(urlTrueAchievement).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Get the estimate time from game url asynchronously.
+        /// </summary>
+        public static async Task<EstimateTimeToUnlock> GetEstimateTimeToUnlockAsync(string urlTrueAchievement)
+        {
             EstimateTimeToUnlock estimateTimeToUnlock = new EstimateTimeToUnlock();
 
             if (urlTrueAchievement.IsNullOrEmpty())
@@ -151,10 +173,7 @@ namespace SuccessStory.Clients
 
             try
             {
-                Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(urlTrueAchievement, null, false, null, true, true, ".game, .main, #main").GetAwaiter().GetResult();
-                sw.Stop();
-                Logger.Debug($"GetEstimateTimeToUnlock web request took {sw.ElapsedMilliseconds}ms for {urlTrueAchievement}");
+                var sourceData = await Web.DownloadSourceDataWebView(urlTrueAchievement, null, false, null, true, true, ".game, .main, #main");
 
                 string response = sourceData.Item1;
 
@@ -169,44 +188,52 @@ namespace SuccessStory.Clients
                 IHtmlDocument htmlDocument = parser.Parse(response);
 
                 int numberDataCount = 0;
-                foreach (IElement SearchElement in htmlDocument.QuerySelectorAll("div.game div.l1 div"))
+                var dataCountElements = htmlDocument.QuerySelectorAll("div.game div.l1 div");
+                if (dataCountElements != null)
                 {
-                    string title = SearchElement.GetAttribute("title");
-                    if (!title.IsNullOrEmpty() && (title == "Maximum TrueAchievement" || title == "Maximum TrueSteamAchievement"))
+                    foreach (IElement SearchElement in dataCountElements)
                     {
-                        string data = SearchElement.InnerHtml;
-                        _ = int.TryParse(Regex.Replace(data, "[^0-9]", ""), out numberDataCount);
-                        break;
+                        string title = SearchElement.GetAttribute("title");
+                        if (!title.IsNullOrEmpty() && (title == "Maximum TrueAchievement" || title == "Maximum TrueSteamAchievement"))
+                        {
+                            string data = SearchElement.InnerHtml;
+                            _ = int.TryParse(Regex.Replace(data, "[^0-9]", ""), out numberDataCount);
+                            break;
+                        }
                     }
                 }
 
-                foreach (IElement SearchElement in htmlDocument.QuerySelectorAll("div.game div.l2 a"))
+                var estimateTimeElements = htmlDocument.QuerySelectorAll("div.game div.l2 a");
+                if (estimateTimeElements != null)
                 {
-                    string title = SearchElement.GetAttribute("title");
-                    if (!title.IsNullOrEmpty() && title == "Estimated time to unlock all achievements")
+                    foreach (IElement SearchElement in estimateTimeElements)
                     {
-                        string estimateTime = SearchElement.InnerHtml
-                            .Replace("<i class=\"fa fa-hourglass-end\"></i>", string.Empty)
-                            .Replace("<i class=\"fa fa-clock-o\"></i>", string.Empty)
-                            .Trim();
-
-                        int estimateTimeMin = 0;
-                        int estimateTimeMax = 0;
-                        int index = 0;
-                        foreach (string item in estimateTime.Replace("h", string.Empty).Split('-'))
+                        string title = SearchElement.GetAttribute("title");
+                        if (!title.IsNullOrEmpty() && title == "Estimated time to unlock all achievements")
                         {
-                            _ = index == 0 ? int.TryParse(item.Replace("+", string.Empty), out estimateTimeMin) : int.TryParse(item, out estimateTimeMax);
-                            index++;
+                            string estimateTime = SearchElement.InnerHtml
+                                .Replace("<i class=\"fa fa-hourglass-end\"></i>", string.Empty)
+                                .Replace("<i class=\"fa fa-clock-o\"></i>", string.Empty)
+                                .Trim();
+
+                            int estimateTimeMin = 0;
+                            int estimateTimeMax = 0;
+                            int index = 0;
+                            foreach (string item in estimateTime.Replace("h", string.Empty).Split('-'))
+                            {
+                                _ = index == 0 ? int.TryParse(item.Replace("+", string.Empty), out estimateTimeMin) : int.TryParse(item, out estimateTimeMax);
+                                index++;
+                            }
+
+                            estimateTimeToUnlock = new EstimateTimeToUnlock
+                            {
+                                DataCount = numberDataCount,
+                                EstimateTime = estimateTime,
+                                EstimateTimeMin = estimateTimeMin,
+                                EstimateTimeMax = estimateTimeMax
+                            };
+                            break;
                         }
-
-                        estimateTimeToUnlock = new EstimateTimeToUnlock
-                        {
-                            DataCount = numberDataCount,
-                            EstimateTime = estimateTime,
-                            EstimateTimeMin = estimateTimeMin,
-                            EstimateTimeMax = estimateTimeMax
-                        };
-                        break;
                     }
                 }
             }
@@ -228,6 +255,14 @@ namespace SuccessStory.Clients
         /// </summary>
         public static Dictionary<string, string> GetDataImages(string gameUrl)
         {
+            return GetDataImagesAsync(gameUrl).GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// Extract achievement image name -> url pairs asynchronously.
+        /// </summary>
+        public static async Task<Dictionary<string, string>> GetDataImagesAsync(string gameUrl)
+        {
             var images = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (string.IsNullOrEmpty(gameUrl))
@@ -237,10 +272,7 @@ namespace SuccessStory.Clients
 
             try
             {
-                Stopwatch sw = Stopwatch.StartNew();
-                var sourceData = Web.DownloadSourceDataWebView(gameUrl, null, false, null, true, true, ".achievement, .achievements, .achievement-list, #achievements, .main, #main").GetAwaiter().GetResult();
-                sw.Stop();
-                Logger.Debug($"GetDataImages web request took {sw.ElapsedMilliseconds}ms for {gameUrl.Substring(0, Math.Min(100, gameUrl.Length))}{(gameUrl.Length > 100 ? "..." : "")}");
+                var sourceData = await Web.DownloadSourceDataWebView(gameUrl, null, false, null, true, true, ".achievement, .achievements, .achievement-list, #achievements, .main, #main");
                 
 
                 string response = sourceData.Item1;
@@ -261,7 +293,6 @@ namespace SuccessStory.Clients
                 catch (Exception exBaseUri)
                 {
                     Logger.Debug($"GetDataImages: invalid base URI '{gameUrl}' - {exBaseUri.Message}");
-                    baseUri = null;
                 }
 
                 // Prefer selectors that commonly contain achievements and images

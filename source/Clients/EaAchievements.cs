@@ -287,8 +287,8 @@ namespace SuccessStory.Clients
             // Pre-compute word sets for all images once (outside the achievement loop)
             var imageWordSets = imagesNormalized.ToDictionary(
                 kv => kv.Key,
-                kv => kv.Key.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Where(w => w.Length > 2).ToHashSet()
+                kv => new HashSet<string>(kv.Key.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(w => w.Length > 2))
             );
 
             foreach (var ach in gameAchievements.Items)
@@ -432,8 +432,14 @@ namespace SuccessStory.Clients
         private static bool PrefersPc(SearchResult s)
         {
             if (s == null) return false;
-            bool platformMatch = s.Platforms?.Any(p => p.Contains("PC", StringComparison.InvariantCultureIgnoreCase) || p.Contains("Windows", StringComparison.InvariantCultureIgnoreCase) || p.Contains("Origin", StringComparison.InvariantCultureIgnoreCase)) ?? false;
+
+            bool platformMatch = s.Platforms?.Any(p => 
+                p.Contains("PC", StringComparison.InvariantCultureIgnoreCase) || 
+                p.Contains("Windows", StringComparison.InvariantCultureIgnoreCase) || 
+                p.Contains("Origin", StringComparison.InvariantCultureIgnoreCase)) ?? false;
+
             bool nameMatch = s.Name?.Contains("PC", StringComparison.InvariantCultureIgnoreCase) ?? false;
+            
             return platformMatch || nameMatch;
         }
 

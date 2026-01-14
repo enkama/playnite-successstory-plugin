@@ -240,6 +240,46 @@ namespace SuccessStory.Clients
                     {
                         Common.LogError(ex, false, "Error while using Exophase fallback for Steam achievements", true, PluginDatabase.PluginName);
                     }
+
+                    // 4) Final Fallback: Try TrueSteamAchievements if Exophase yields no results or fails
+                    if (!gameAchievements.HasAchievements)
+                    {
+                        try
+                        {
+                            Logger.Info($"Steam.GetAchievements: trying TrueSteamAchievements fallback for {game.Name}");
+                            var tsSearch = TrueAchievements.SearchGame(game, TrueAchievements.OriginData.Steam);
+                            if (tsSearch?.Count > 0)
+                            {
+                                var bestMatch = tsSearch.Select(x => new { Item = x, Score = Fuzz.TokenSetRatio(game.Name.ToLower(), x.GameName.ToLower()) })
+                                    .OrderByDescending(x => x.Score)
+                                    .FirstOrDefault();
+
+                                if (bestMatch != null && bestMatch.Score >= 80)
+                                {
+                                    var images = TrueAchievements.GetDataImages(bestMatch.Item.GameUrl);
+                                    if (images?.Count > 0)
+                                    {
+                                        var tsAll = images.Select(x => new Models.Achievement
+                                        {
+                                            ApiName = x.Key,
+                                            Name = x.Key,
+                                            UrlUnlocked = x.Value,
+                                            UrlLocked = x.Value,
+                                            Percent = 0
+                                        }).ToList();
+
+                                        gameAchievements.Items = tsAll;
+                                        gameAchievements.SourcesLink = new CommonPluginsShared.Models.SourceLink { GameName = bestMatch.Item.GameName, Name = "TrueSteamAchievements", Url = bestMatch.Item.GameUrl };
+                                        Logger.Info($"Steam.GetAchievements: found {tsAll.Count} achievements on TrueSteamAchievements for {game.Name}");
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception exTs)
+                        {
+                            Common.LogError(exTs, false, "Error while using TrueSteamAchievements fallback for Steam achievements", true, PluginDatabase.PluginName);
+                        }
+                    }
                 }
             }
             else
@@ -289,14 +329,8 @@ namespace SuccessStory.Clients
                 }
             }
 
-            var swRarity = Stopwatch.StartNew();
             SetRarity(appId, gameAchievements);
-            swRarity.Stop();
-            Logger.Debug($"Steam.SetRarity took {swRarity.ElapsedMilliseconds}ms");
-            swOverall.Stop();
-            Logger.Info($"Steam.GetAchievements execution took {swOverall.ElapsedMilliseconds}ms for {game.Name}");
             gameAchievements.SetRaretyIndicator();
-
             return gameAchievements;
         }
 
@@ -380,11 +414,7 @@ namespace SuccessStory.Clients
 
             var swRarity = Stopwatch.StartNew();
             SetRarity(appId, gameAchievements);
-            swRarity.Stop();
-            Logger.Debug($"Steam.SetRarity took {swRarity.ElapsedMilliseconds}ms");
             gameAchievements.SetRaretyIndicator();
-            swOverall.Stop();
-            Logger.Info($"Steam.GetAchievements (appId) execution took {swOverall.ElapsedMilliseconds}ms for {game.Name}");
             return gameAchievements;
         }
 
@@ -421,8 +451,6 @@ namespace SuccessStory.Clients
                 }).ToList();
                 gameAchievements.Items = allAchievements;
                 gameAchievements.IsManual = true;
-                swOverall.Stop();
-                Logger.Debug($"Steam.GetManual execution took {swOverall.ElapsedMilliseconds}ms");
             }
 
             return gameAchievements;
@@ -450,8 +478,6 @@ namespace SuccessStory.Clients
                 });
             }
             PluginDatabase.AddOrUpdate(gameAchievements);
-            sw.Stop();
-            Logger.Debug($"Steam.SetRarity implementation took {sw.ElapsedMilliseconds}ms");
         }
 
         #region Configuration

@@ -210,7 +210,7 @@ namespace SuccessStory.Clients
                     // Try WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
                     try
                     {
-                        var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains);
+                        var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains, true, true, "ul.achievement, ul.trophy, ul.challenge");
                         if (!string.IsNullOrEmpty(webData.Item1))
                         {
                             dataExophase = webData.Item1;
@@ -319,7 +319,7 @@ namespace SuccessStory.Clients
                     // If localized page contains a notice message, skip retries
                     if (!string.IsNullOrEmpty(dataExophaseLocalised) && dataExophaseLocalised.Contains("Notice Message App"))
                     {
-                        // skip additional retries
+                        return gameAchievements;
                     }
                  }
 
@@ -973,16 +973,6 @@ namespace SuccessStory.Clients
                 catch (Exception ex)
                 {
                     Logger.Warn($"Error disposing cancellation token source: {ex.Message}");
-                }
-                
-                // Recreate for potential reuse (though typically shutdown is final)
-                try
-                {
-                    _bgFetchCts = new CancellationTokenSource();
-                }
-                catch (Exception ex)
-                {
-                    Logger.Warn($"Error recreating cancellation token source: {ex.Message}");
                 }
             }
             

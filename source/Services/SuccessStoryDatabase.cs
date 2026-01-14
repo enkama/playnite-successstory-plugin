@@ -435,12 +435,15 @@ namespace SuccessStory.Services
                                                 if (!bestMatch.Data.GameUrl.IsNullOrEmpty())
                                                 {
                                                     EstimateTimeToUnlock estimateTime = TrueAchievements.GetEstimateTimeToUnlock(bestMatch.Data.GameUrl);
-                                                    if (origin == OriginData.Steam) estimateTimeSteam = estimateTime;
-                                                    else estimateTimeXbox = estimateTime;
+                                                    if (estimateTime != null)
+                                                    {
+                                                        if (origin == OriginData.Steam) estimateTimeSteam = estimateTime;
+                                                        else estimateTimeXbox = estimateTime;
+                                                    }
 
                                                     // If we found a very good match for our native platform, we can stop here
-                                                    if ((isSteam && origin == OriginData.Steam && bestMatch.MatchPercent > 90) ||
-                                                        (isXbox && origin == OriginData.Xbox && bestMatch.MatchPercent > 90))
+                                                    if (estimateTime != null && ((isSteam && origin == OriginData.Steam && bestMatch.MatchPercent > 90) ||
+                                                        (isXbox && origin == OriginData.Xbox && bestMatch.MatchPercent > 90)))
                                                     {
                                                         Logger.Debug($"Found excellent native match ({bestMatch.MatchPercent}%) for {game.Name} on {originName}. Skipping second search.");
                                                         break;
@@ -475,12 +478,12 @@ namespace SuccessStory.Services
 
                         await searchTask.ConfigureAwait(false);
 
-                        if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
+                        if (estimateTimeSteam != null && estimateTimeXbox != null && estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
                         {
                             Common.LogDebug(true, $"Using EstimateTime (Steam) for {game.Name}");
                             gameAchievements.EstimateTime = estimateTimeSteam;
                         }
-                        else if (estimateTimeXbox.DataCount > 0)
+                        else if (estimateTimeXbox != null && estimateTimeXbox.DataCount > 0)
                         {
                             Common.LogDebug(true, $"Using EstimateTime (Xbox) for {game.Name}");
                             gameAchievements.EstimateTime = estimateTimeXbox;
@@ -921,16 +924,23 @@ namespace SuccessStory.Services
             bool mustUpdate = true;
             if (webItem != null && !webItem.HasAchievements)
             {
-                mustUpdate = !loadedItem.HasAchievements;
+                mustUpdate = loadedItem != null && !loadedItem.HasAchievements;
             }
 
             if (webItem != null && !ReferenceEquals(loadedItem, webItem) && mustUpdate)
             {
-                if (webItem.HasAchievements)
+                try
                 {
-                    webItem = SetEstimateTimeToUnlock(game, webItem);
+                    if (webItem.HasAchievements)
+                    {
+                        webItem = SetEstimateTimeToUnlock(game, webItem);
+                    }
+                    Update(webItem);
                 }
-                Update(webItem);
+                catch (Exception ex)
+                {
+                    Common.LogError(ex, false, true, PluginName);
+                }
             }
             else
             {
