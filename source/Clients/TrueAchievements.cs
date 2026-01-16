@@ -161,7 +161,7 @@ namespace SuccessStory.Clients
         /// <summary>
         /// Get the estimate time from game url asynchronously.
         /// </summary>
-        public static async Task<EstimateTimeToUnlock> GetEstimateTimeToUnlockAsync(string urlTrueAchievement)
+        public static async Task<EstimateTimeToUnlock> GetEstimateTimeToUnlockAsync(string urlTrueAchievement, System.Threading.CancellationToken cancellationToken = default)
         {
             EstimateTimeToUnlock estimateTimeToUnlock = new EstimateTimeToUnlock();
 
@@ -173,7 +173,7 @@ namespace SuccessStory.Clients
 
             try
             {
-                var sourceData = await Web.DownloadSourceDataWebView(urlTrueAchievement, null, false, null, true, true, ".game, .main, #main");
+                var sourceData = await Web.DownloadSourceDataWebView(urlTrueAchievement, null, false, null, true, true, ".game, .main, #main", cancellationToken);
 
                 string response = sourceData.Item1;
 

@@ -105,9 +105,9 @@ namespace SuccessStory.Clients
             throw new NotImplementedException();
         }
 
-        public GameAchievements GetAchievements(Game game, string url)
+        public GameAchievements GetAchievements(Game game, string url, CancellationToken cancellationToken = default)
         {
-            return GetAchievements(game, new SearchResult { Name = game.Name, Url = url });
+            return GetAchievements(game, new SearchResult { Name = game.Name, Url = url }, cancellationToken);
         }
 
         public async Task<GameAchievements> GetAchievementsAsync(Game game, string url)
@@ -124,7 +124,7 @@ namespace SuccessStory.Clients
         /// <param name="searchResult">The search result containing the URL</param>
         /// <returns>Game achievements</returns>
         /// <exception cref="InvalidOperationException">Thrown if called from a thread with a synchronization context</exception>
-        public GameAchievements GetAchievements(Game game, SearchResult searchResult)
+        public GameAchievements GetAchievements(Game game, SearchResult searchResult, CancellationToken cancellationToken = default)
         {
             // Enforce background thread usage to prevent deadlocks
             if (SynchronizationContext.Current != null)
@@ -135,10 +135,10 @@ namespace SuccessStory.Clients
             }
             
             // Synchronous wrapper for backward compatibility
-            return GetAchievementsAsync(game, searchResult).GetAwaiter().GetResult();
+            return GetAchievementsAsync(game, searchResult, cancellationToken).GetAwaiter().GetResult();
         }
 
-        public async Task<GameAchievements> GetAchievementsAsync(Game game, SearchResult searchResult)
+        public async Task<GameAchievements> GetAchievementsAsync(Game game, SearchResult searchResult, CancellationToken cancellationToken = default)
         {
             GameAchievements gameAchievements = SuccessStory.PluginDatabase.GetDefault(game);
             List<Achievement> allAchievements = new List<Achievement>();
@@ -210,7 +210,7 @@ namespace SuccessStory.Clients
                     // Try WebView fetch first to obtain fully rendered page (bypasses Cloudflare/JS)
                     try
                     {
-                        var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains, true, true, "ul.achievement, ul.trophy, ul.challenge");
+                        var webData = await Web.DownloadSourceDataWebView(fetchUrl, GetCookies(), true, CookiesDomains, true, true, "ul.achievement, ul.trophy, ul.challenge", cancellationToken);
                         if (!string.IsNullOrEmpty(webData.Item1))
                         {
                             dataExophase = webData.Item1;
@@ -421,7 +421,7 @@ namespace SuccessStory.Clients
 
         #region Exophase
 
-        public void Login()
+        public async Task Login()
         {
             FileSystem.DeleteFile(CookiesPath);
             ResetCachedIsConnectedResult();
@@ -456,7 +456,7 @@ namespace SuccessStory.Clients
             List<HttpCookie> httpCookies = null;
             for (int retry = 0; retry < COOKIE_FLUSH_MAX_RETRIES; retry++)
             {
-                Thread.Sleep(COOKIE_FLUSH_WAIT_MS);
+                await Task.Delay(COOKIE_FLUSH_WAIT_MS);
                 httpCookies = CookiesTools.GetWebCookies(true);
                 
                 if (httpCookies?.Count > 0)
@@ -584,7 +584,7 @@ namespace SuccessStory.Clients
         /// </summary>
         /// <param name="gameAchievements"></param>
         /// <param name="source"></param>
-        public void SetRarety(GameAchievements gameAchievements, Services.SuccessStoryDatabase.AchievementSource source)
+        public void SetRarety(GameAchievements gameAchievements, Services.SuccessStoryDatabase.AchievementSource source, CancellationToken cancellationToken = default)
         {
             string achievementsUrl = GetAchievementsPageUrl(gameAchievements, source);
             if (achievementsUrl.IsNullOrEmpty())
@@ -595,7 +595,7 @@ namespace SuccessStory.Clients
 
             try
             {
-                GameAchievements exophaseAchievements = GetAchievements(gameAchievements.Game, achievementsUrl);
+                GameAchievements exophaseAchievements = GetAchievements(gameAchievements.Game, achievementsUrl, cancellationToken);
                 var missingMatches = new List<string>();
                 
                 foreach (var y in exophaseAchievements.Items)

@@ -190,14 +190,14 @@ namespace SuccessStory.Views
 
         #region Exophase
 
-        private void Button_Click(object sender, RoutedEventArgs e)
+        private async void Button_Click(object sender, RoutedEventArgs e)
         {
             lIsAuth.Content = ResourceProvider.GetString("LOCCommonLoginChecking");
 
             try
             {
                 SuccessStory.ExophaseAchievements.ResetCachedIsConnectedResult();
-                SuccessStory.ExophaseAchievements.Login();
+                await SuccessStory.ExophaseAchievements.Login();
 
                 Task task = Task.Run(() => CheckLogged())
                     .ContinueWith(antecedent =>

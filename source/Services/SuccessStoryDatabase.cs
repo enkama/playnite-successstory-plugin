@@ -504,10 +504,10 @@ namespace SuccessStory.Services
         /// WARNING: Uses Task.Run to avoid deadlock on UI threads.
         /// Prefer calling SetEstimateTimeToUnlockAsync directly when possible.
         /// </summary>
-        private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements)
+        private GameAchievements SetEstimateTimeToUnlock(Game game, GameAchievements gameAchievements, CancellationToken cancellationToken = default)
         {
             // Use Task.Run to offload to thread pool and avoid capturing sync context
-            return Task.Run(() => SetEstimateTimeToUnlockAsync(game, gameAchievements)).GetAwaiter().GetResult();
+            return Task.Run(() => SetEstimateTimeToUnlockAsync(game, gameAchievements, cancellationToken)).GetAwaiter().GetResult();
         }
 
         public enum AchievementSource
@@ -1171,7 +1171,7 @@ namespace SuccessStory.Services
                                 break;
 
                             case "exophase":
-                                SuccessStory.ExophaseAchievements.SetRarety(gameAchievements, AchievementSource.Local);
+                                SuccessStory.ExophaseAchievements.SetRarety(gameAchievements, AchievementSource.Local, a.CancelToken);
                                 break;
 
                             default:
@@ -1234,7 +1234,7 @@ namespace SuccessStory.Services
                     {
                         Game game = API.Instance.Database.Games.Get(gameAchievements.Id);
                         GameAchievements gameAchievementsNew = Serialization.GetClone(gameAchievements);
-                        gameAchievementsNew = SetEstimateTimeToUnlock(game, gameAchievements);
+                        gameAchievementsNew = SetEstimateTimeToUnlock(game, gameAchievements, a.CancelToken);
                         AddOrUpdate(gameAchievementsNew);
                     }
                     catch (Exception ex)
