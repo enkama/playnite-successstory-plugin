@@ -53,7 +53,7 @@ namespace SuccessStory.Services
             };
         });
 
-        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
+        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => new Dictionary<AchievementSource, GenericAchievements>(achievementProviders.Value);
 
         public SuccessStoryDatabase(SuccessStorySettingsViewModel pluginSettings, string pluginUserDataPath) : base(pluginSettings, "SuccessStory", pluginUserDataPath)
         {
@@ -476,7 +476,19 @@ namespace SuccessStory.Services
                             }
                         }, cts.Token);
 
-                        await searchTask.ConfigureAwait(false);
+                        }, cts.Token);
+
+                        var completedTask = await Task.WhenAny(searchTask, Task.Delay(TimeSpan.FromSeconds(10)));
+                        if (completedTask == searchTask)
+                        {
+                            await searchTask.ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            Logger.Warn($"SetEstimateTimeToUnlockAsync timed out for {game.Name}");
+                            // Attempt to cancel the running task
+                            try { cts.Cancel(); } catch { }
+                        }
 
                         if (estimateTimeSteam != null && estimateTimeXbox != null && estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
                         {

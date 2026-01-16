@@ -317,9 +317,11 @@ namespace SuccessStory.Clients
                          dataExophaseLocalised = string.Empty;
                      }
                     // If localized page contains a notice message, skip retries
+                    // If localized page contains a notice message, skip retries and fallback to default
                     if (!string.IsNullOrEmpty(dataExophaseLocalised) && dataExophaseLocalised.Contains("Notice Message App"))
                     {
-                        return gameAchievements;
+                        Common.LogDebug(true, $"Exophase localized page contained 'Notice Message App'. Falling back to non-localized data.");
+                        dataExophaseLocalised = null;
                     }
                  }
 

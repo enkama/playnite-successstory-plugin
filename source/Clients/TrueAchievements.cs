@@ -40,7 +40,8 @@ namespace SuccessStory.Clients
         /// <returns></returns>
         public static List<TrueAchievementSearch> SearchGame(Game game, OriginData originData)
         {
-            return SearchGameAsync(game, originData).GetAwaiter().GetResult();
+            // Offload to thread pool to avoid capturing sync context
+            return Task.Run(() => SearchGameAsync(game, originData)).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -155,7 +156,8 @@ namespace SuccessStory.Clients
         /// <returns></returns>
         public static EstimateTimeToUnlock GetEstimateTimeToUnlock(string urlTrueAchievement)
         {
-            return GetEstimateTimeToUnlockAsync(urlTrueAchievement).GetAwaiter().GetResult();
+            // Offload to thread pool to avoid capturing sync context
+            return Task.Run(() => GetEstimateTimeToUnlockAsync(urlTrueAchievement)).GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -255,7 +257,8 @@ namespace SuccessStory.Clients
         /// </summary>
         public static Dictionary<string, string> GetDataImages(string gameUrl)
         {
-            return GetDataImagesAsync(gameUrl).GetAwaiter().GetResult();
+            // Offload to thread pool to avoid capturing sync context
+            return Task.Run(() => GetDataImagesAsync(gameUrl)).GetAwaiter().GetResult();
         }
 
         /// <summary>
