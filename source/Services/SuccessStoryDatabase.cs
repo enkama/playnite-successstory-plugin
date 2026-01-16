@@ -476,7 +476,7 @@ namespace SuccessStory.Services
                             }
                         }, cts.Token);
 
-                        }, cts.Token);
+
 
                         var completedTask = await Task.WhenAny(searchTask, Task.Delay(TimeSpan.FromSeconds(10)));
                         if (completedTask == searchTask)
