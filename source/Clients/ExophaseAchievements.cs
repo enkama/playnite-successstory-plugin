@@ -64,10 +64,6 @@ namespace SuccessStory.Clients
 
         // Cache expiration in days
         private const int CACHE_EXPIRATION_DAYS = 7;
-        // Wait time in milliseconds for cookies to flush to disk
-        private const int COOKIE_FLUSH_WAIT_MS = 2000;
-        // Maximum retry attempts for cookie flush
-        private const int COOKIE_FLUSH_MAX_RETRIES = 3;
 
         private static readonly SemaphoreSlim _bgFetchSemaphore = new SemaphoreSlim(2);
         private static CancellationTokenSource _bgFetchCts = new CancellationTokenSource();
@@ -427,49 +423,62 @@ namespace SuccessStory.Clients
 
         #region Exophase
 
-        public async Task Login()
+        public Task Login()
         {
-            FileSystem.DeleteFile(CookiesPath);
-            ResetCachedIsConnectedResult();
-
-            WebViewSettings webViewSettings = new WebViewSettings
+            try
             {
-                WindowWidth = 580,
-                WindowHeight = 700,
-                JavaScriptEnabled = true,
-                // This is needed otherwise captcha won't pass
-                UserAgent = Web.UserAgent
-            };
+                FileSystem.DeleteFile(CookiesPath);
+                ResetCachedIsConnectedResult();
 
-            using (IWebView webView = API.Instance.WebViews.CreateView(webViewSettings))
-            {
-                webView.LoadingChanged += (s, e) =>
+                WebViewSettings webViewSettings = new WebViewSettings
                 {
-                    string address = webView.GetCurrentAddress();
-                    if (address.StartsWith(UrlExophaseAccount, StringComparison.InvariantCultureIgnoreCase) && !address.StartsWith(UrlExophaseLogout, StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        var cookies = webView.GetCookies();
-                        if (cookies?.Count > 0)
-                        {
-                            SetCookies(cookies);
-                            CachedIsConnectedResult = true;
-                        }
-                        else
-                        {
-                            Logger.Warn("Exophase Login: No cookies found in WebView.");
-                        }
-                        webView.Close();
-                    }
+                    WindowWidth = 580,
+                    WindowHeight = 700,
+                    JavaScriptEnabled = true,
+                    // This is needed otherwise captcha won't pass
+                    UserAgent = Web.UserAgent
                 };
 
-                webView.DeleteDomainCookies(CookiesDomains.First());
-                webView.Navigate(UrlExophaseLogin);
-                _ = webView.OpenDialog();
+                using (IWebView webView = API.Instance.WebViews.CreateView(webViewSettings))
+                {
+                    webView.LoadingChanged += (s, e) =>
+                    {
+                        string address = webView.GetCurrentAddress();
+                        if (address.StartsWith(UrlExophaseAccount, StringComparison.InvariantCultureIgnoreCase) && !address.StartsWith(UrlExophaseLogout, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            var cookies = webView.GetCookies();
+                            if (cookies?.Count > 0)
+                            {
+                                SetCookies(cookies);
+                                CachedIsConnectedResult = true;
+                            }
+                            else
+                            {
+                                Logger.Warn("Exophase Login: No cookies found in WebView.");
+                            }
+                            webView.Close();
+                        }
+                    };
+
+                    webView.DeleteDomainCookies(CookiesDomains.First());
+                    webView.Navigate(UrlExophaseLogin);
+                    _ = webView.OpenDialog();
+                }
             }
+            catch (Exception ex)
+            {
+                Common.LogError(ex, false, true, PluginDatabase.PluginName);
+            }
+            return Task.CompletedTask;
         }
 
         private bool GetIsUserLoggedIn()
         {
+            if (SynchronizationContext.Current != null)
+            {
+                Logger.Warn("GetIsUserLoggedIn called from UI thread, potential deadlock.");
+            }
+
             var data = Web.DownloadSourceDataWebView(UrlExophaseAccount, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();
             bool isConnected = data.Item1.Contains("column-username", StringComparison.InvariantCultureIgnoreCase);
 

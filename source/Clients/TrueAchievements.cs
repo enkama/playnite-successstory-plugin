@@ -221,10 +221,28 @@ namespace SuccessStory.Clients
                             int estimateTimeMin = 0;
                             int estimateTimeMax = 0;
                             int index = 0;
-                            foreach (string item in estimateTime.Replace("h", string.Empty).Split('-'))
+                            foreach (string item in estimateTime.Split('-'))
                             {
-                                _ = index == 0 ? int.TryParse(item.Replace("+", string.Empty), out estimateTimeMin) : int.TryParse(item, out estimateTimeMax);
+                                string cleaned = Regex.Replace(item, "[^0-9]", "");
+                                if (string.IsNullOrEmpty(cleaned))
+                                {
+                                    continue;
+                                }
+
+                                if (index == 0)
+                                {
+                                    int.TryParse(cleaned, out estimateTimeMin);
+                                }
+                                else
+                                {
+                                    int.TryParse(cleaned, out estimateTimeMax);
+                                }
                                 index++;
+                            }
+
+                            if (estimateTimeMax == 0 && estimateTimeMin > 0)
+                            {
+                                estimateTimeMax = estimateTimeMin;
                             }
 
                             estimateTimeToUnlock = new EstimateTimeToUnlock
@@ -340,10 +358,12 @@ namespace SuccessStory.Clients
 
                 var processedUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 int index = 0;
+                int processedCount = 0;
                 foreach (var img in imgElements)
                 {
                     // Cap processed images to avoid performance issues on huge pages
-                    if (index >= MaxImagesPerPage) break;
+                    processedCount++;
+                    if (index >= MaxImagesPerPage || processedCount >= MaxImagesPerPage * 4) break;
 
                     try
                     {

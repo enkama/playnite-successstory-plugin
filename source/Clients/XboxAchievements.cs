@@ -63,7 +63,7 @@ namespace SuccessStory.Clients
                     {
                         try
                         {
-                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData).ConfigureAwait(false), cts.Token).GetAwaiter().GetResult() ?? new List<Achievement>();
+                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData, cts.Token).ConfigureAwait(false), cts.Token).GetAwaiter().GetResult() ?? new List<Achievement>();
                         }
                         catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
                         {
@@ -334,9 +334,9 @@ namespace SuccessStory.Clients
                                 Logger.Debug($"Xbox title ID cache size limit reached ({_titleIdCacheMaxSize}), clearing cache");
                                 _titleIdCache.Clear();
                             }
+                            _titleIdCache.TryAdd(game.GameId, titleInfo.titleId);
                         }
                         
-                        _titleIdCache.TryAdd(game.GameId, titleInfo.titleId);
                         return titleInfo.titleId;
                     }
                     else
@@ -356,7 +356,7 @@ namespace SuccessStory.Clients
 
 
 
-        private async Task<TContent> GetSerializedContentFromUrl<TContent>(string url, AuthorizationData authData, string contractVersion) where TContent : class
+        private async Task<TContent> GetSerializedContentFromUrl<TContent>(string url, AuthorizationData authData, string contractVersion, CancellationToken cancellationToken) where TContent : class
         {
             Common.LogDebug(true, $"{ClientName} - url: {url}");
 
@@ -366,7 +366,7 @@ namespace SuccessStory.Clients
                 request.Headers.Add("User-Agent", Web.UserAgent);
                 SetAuthenticationHeaders(request.Headers, authData, contractVersion);
 
-                using (HttpResponseMessage response = await _sharedHttpClient.SendAsync(request).ConfigureAwait(false))
+                using (HttpResponseMessage response = await _sharedHttpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
                 {
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
@@ -401,9 +401,9 @@ namespace SuccessStory.Clients
         }
 
 
-        private async Task<List<Achievement>> GetXboxAchievements(Game game, AuthorizationData authorizationData)
+        private async Task<List<Achievement>> GetXboxAchievements(Game game, AuthorizationData authorizationData, CancellationToken cancellationToken)
         {
-            var getAchievementMethods = new List<Func<Game, AuthorizationData, Task<List<Achievement>>>>
+            var getAchievementMethods = new List<Func<Game, AuthorizationData, CancellationToken, Task<List<Achievement>>>>
             {
                 GetXboxOneAchievements
             };
@@ -420,11 +420,11 @@ namespace SuccessStory.Clients
                 getAchievementMethods.Reverse();
             }
 
-            foreach (Func<Game, AuthorizationData, Task<List<Achievement>>> getAchievementsMethod in getAchievementMethods)
+            foreach (Func<Game, AuthorizationData, CancellationToken, Task<List<Achievement>>> getAchievementsMethod in getAchievementMethods)
             {
                 try
                 {
-                    List<Achievement> result = await getAchievementsMethod.Invoke(game, authorizationData).ConfigureAwait(false);
+                    List<Achievement> result = await getAchievementsMethod.Invoke(game, authorizationData, cancellationToken).ConfigureAwait(false);
                     if (result != null && result.Any())
                     {
                         return result;
@@ -452,7 +452,7 @@ namespace SuccessStory.Clients
         /// <param name="game"></param>
         /// <param name="authorizationData"></param>
         /// <returns></returns>
-        private async Task<List<Achievement>> GetXboxOneAchievements(Game game, AuthorizationData authorizationData)
+        private async Task<List<Achievement>> GetXboxOneAchievements(Game game, AuthorizationData authorizationData, CancellationToken cancellationToken)
         {
             if (authorizationData is null)
             {
@@ -472,7 +472,7 @@ namespace SuccessStory.Clients
                 Logger.Warn($"{ClientName} - Bad request");
             }
 
-            XboxOneAchievementResponse response = await GetSerializedContentFromUrl<XboxOneAchievementResponse>(url, authorizationData, "2").ConfigureAwait(false);
+            XboxOneAchievementResponse response = await GetSerializedContentFromUrl<XboxOneAchievementResponse>(url, authorizationData, "2", cancellationToken).ConfigureAwait(false);
 
             List<XboxOneAchievement> relevantAchievements;
             if (titleId.IsNullOrEmpty())
@@ -496,7 +496,7 @@ namespace SuccessStory.Clients
         /// <param name="game"></param>
         /// <param name="authorizationData"></param>
         /// <returns></returns>
-        private async Task<List<Achievement>> GetXbox360Achievements(Game game, AuthorizationData authorizationData)
+        private async Task<List<Achievement>> GetXbox360Achievements(Game game, AuthorizationData authorizationData, CancellationToken cancellationToken)
         {
             if (authorizationData is null)
             {
@@ -517,11 +517,11 @@ namespace SuccessStory.Clients
 
             // gets the player-unlocked achievements
             string unlockedAchievementsUrl = string.Format(AchievementsBaseUrl, xuid) + $"?titleId={titleId}&maxItems=1000";
-            Task<Xbox360AchievementResponse> getUnlockedAchievementsTask = GetSerializedContentFromUrl<Xbox360AchievementResponse>(unlockedAchievementsUrl, authorizationData, "1");
+            Task<Xbox360AchievementResponse> getUnlockedAchievementsTask = GetSerializedContentFromUrl<Xbox360AchievementResponse>(unlockedAchievementsUrl, authorizationData, "1", cancellationToken);
 
             // gets all of the game's achievements, but they're all marked as locked
             string allAchievementsUrl = string.Format(TitleAchievementsBaseUrl, xuid) + $"?titleId={titleId}&maxItems=1000";
-            Task<Xbox360AchievementResponse> getAllAchievementsTask = GetSerializedContentFromUrl<Xbox360AchievementResponse>(allAchievementsUrl, authorizationData, "1");
+            Task<Xbox360AchievementResponse> getAllAchievementsTask = GetSerializedContentFromUrl<Xbox360AchievementResponse>(allAchievementsUrl, authorizationData, "1", cancellationToken);
 
             await Task.WhenAll(getUnlockedAchievementsTask, getAllAchievementsTask).ConfigureAwait(false);
 
@@ -610,7 +610,7 @@ namespace SuccessStory.Clients
                 }
                 catch (Exception ex)
                 {
-                    Common.LogError(ex, false, "Failed to dispose semaphore");
+                    Common.LogError(ex, false, true, PluginDatabase.PluginName);
                 }
                 
                 try

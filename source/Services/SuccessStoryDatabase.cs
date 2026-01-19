@@ -53,7 +53,7 @@ namespace SuccessStory.Services
             };
         });
 
-        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
+        public static IReadOnlyDictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
 
         public SuccessStoryDatabase(SuccessStorySettingsViewModel pluginSettings, string pluginUserDataPath) : base(pluginSettings, "SuccessStory", pluginUserDataPath)
         {
@@ -481,7 +481,17 @@ namespace SuccessStory.Services
 
                         try
                         {
-                            await searchTask.ConfigureAwait(false);
+                            var delayTask = Task.Delay(10000, cts.Token);
+                            var completedTask = await Task.WhenAny(searchTask, delayTask).ConfigureAwait(false);
+
+                            if (completedTask == searchTask)
+                            {
+                                await searchTask.ConfigureAwait(false); // Propagate exceptions
+                            }
+                            else
+                            {
+                                Logger.Debug($"SetEstimateTimeToUnlockAsync timed out for {game.Name}");
+                            }
                         }
                         catch (Exception ex)
                         {
@@ -895,8 +905,23 @@ namespace SuccessStory.Services
 
         public override void RefreshNoLoader(Guid id, CancellationToken cancellationToken = default)
         {
-            Game game = API.Instance.Database.Games.Get(id);
-            GameAchievements loadedItem = Get(id, true);
+            Game game = null;
+            GameAchievements loadedItem = null;
+
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                game = API.Instance.Database.Games.Get(id);
+                loadedItem = Get(id, true);
+            }
+            else
+            {
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    game = API.Instance.Database.Games.Get(id);
+                    loadedItem = Get(id, true);
+                });
+            }
+
             GameAchievements webItem = null;
 
             if (loadedItem?.IsIgnored == true)
@@ -964,7 +989,14 @@ namespace SuccessStory.Services
                 webItem = loadedItem;
             }
 
-            ActionAfterRefresh(webItem);
+            if (Application.Current.Dispatcher.CheckAccess())
+            {
+                ActionAfterRefresh(webItem);
+            }
+            else
+            {
+                Application.Current.Dispatcher.Invoke(() => ActionAfterRefresh(webItem));
+            }
         }
 
         public override void Refresh(IEnumerable<Guid> ids, string message)

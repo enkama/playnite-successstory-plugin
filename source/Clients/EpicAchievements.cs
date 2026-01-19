@@ -64,7 +64,7 @@ namespace SuccessStory.Clients
                     }
                     else
                     {
-                        // No achievements returned by Epic API
+                        Logger.Debug($"No achievements found for {game.Name} on Epic");
                     }
 
                     // Set source link
@@ -86,6 +86,7 @@ namespace SuccessStory.Clients
             else
             {
                 ShowNotificationPluginNoAuthenticate(ExternalPlugin.SuccessStory);
+                return gameAchievements;
             }
 
             gameAchievements.SetRaretyIndicator();
