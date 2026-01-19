@@ -11,8 +11,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using static CommonPluginsShared.PlayniteTools;
-using FuzzySharp;
-using CommonPluginsShared.Models;
+
 
 namespace SuccessStory.Clients
 {
@@ -65,8 +64,7 @@ namespace SuccessStory.Clients
                     }
                     else
                     {
-                        // No achievements returned by Epic API — try Exophase as a fallback to obtain achievement metadata/images
-
+                        // No achievements returned by Epic API
                     }
 
                     // Set source link
@@ -75,6 +73,7 @@ namespace SuccessStory.Clients
                         var swSlug = Stopwatch.StartNew();
                         string productSlug = EpicApi.GetProductSlug(targetNamespace);
                         swSlug.Stop();
+                        Logger.Debug($"Epic.GetProductSlug: {swSlug.ElapsedMilliseconds}ms");
                         gameAchievements.SourcesLink = EpicApi.GetAchievementsSourceLink(game.Name, productSlug, EpicApi.CurrentAccountInfos);
                     }
                 }

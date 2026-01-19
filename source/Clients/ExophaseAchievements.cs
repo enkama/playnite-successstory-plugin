@@ -228,11 +228,15 @@ namespace SuccessStory.Clients
                         string fetched = null;
                         try
                         {
-                            var resp = await _sharedHttpClient.GetAsync(fetchUrl);
+                            var resp = await _sharedHttpClient.GetAsync(fetchUrl, cancellationToken);
                             if (resp.IsSuccessStatusCode)
                             {
                                 fetched = await resp.Content.ReadAsStringAsync();
                             }
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // Cancelled
                         }
                         catch (Exception ex)
                         {
@@ -444,7 +448,16 @@ namespace SuccessStory.Clients
                     string address = webView.GetCurrentAddress();
                     if (address.StartsWith(UrlExophaseAccount, StringComparison.InvariantCultureIgnoreCase) && !address.StartsWith(UrlExophaseLogout, StringComparison.InvariantCultureIgnoreCase))
                     {
-                        CachedIsConnectedResult = true;
+                        var cookies = webView.GetCookies();
+                        if (cookies?.Count > 0)
+                        {
+                            SetCookies(cookies);
+                            CachedIsConnectedResult = true;
+                        }
+                        else
+                        {
+                            Logger.Warn("Exophase Login: No cookies found in WebView.");
+                        }
                         webView.Close();
                     }
                 };
@@ -452,33 +465,6 @@ namespace SuccessStory.Clients
                 webView.DeleteDomainCookies(CookiesDomains.First());
                 webView.Navigate(UrlExophaseLogin);
                 _ = webView.OpenDialog();
-            }
-
-            // Wait for cookies to be flushed to disk with retry logic
-            List<HttpCookie> httpCookies = null;
-            for (int retry = 0; retry < COOKIE_FLUSH_MAX_RETRIES; retry++)
-            {
-                await Task.Delay(COOKIE_FLUSH_WAIT_MS);
-                httpCookies = CookiesTools.GetWebCookies(true);
-                
-                if (httpCookies?.Count > 0)
-                {
-                    break;
-                }
-                
-                if (retry < COOKIE_FLUSH_MAX_RETRIES - 1)
-                {
-                    Logger.Debug($"Exophase Login: Waiting for cookies to flush (attempt {retry + 1}/{COOKIE_FLUSH_MAX_RETRIES})");
-                }
-            }
-            
-            if (httpCookies?.Count > 0)
-            {
-                SetCookies(httpCookies);
-            }
-            else
-            {
-                Logger.Warn("Exophase Login: No cookies found after login.");
             }
         }
 
@@ -946,6 +932,7 @@ namespace SuccessStory.Clients
 
         /// <summary>
         /// Shutdown method to cancel background tasks and dispose resources. Should be called when plugin unloads.
+        /// Note: This operation is terminal for the static background fetcher. Background fetches cannot be restarted without reloading the domain/application.
         /// </summary>
         public static void Shutdown()
         {

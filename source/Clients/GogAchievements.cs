@@ -9,9 +9,7 @@ using System.Collections.ObjectModel;
 using CommonPluginsStores.Models;
 using System.Collections.Generic;
 using Playnite.SDK;
-using FuzzySharp;
-using CommonPluginsShared.Models;
-using CommonPluginsShared.Extensions;
+
 
 namespace SuccessStory.Clients
 {
@@ -58,8 +56,7 @@ namespace SuccessStory.Clients
                     }
                     else
                     {
-                        // No achievements returned by GOG API — try Exophase as a fallback
-
+                        // No achievements returned by GOG API
                     }
 
                     // Set source link

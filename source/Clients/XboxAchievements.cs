@@ -63,7 +63,7 @@ namespace SuccessStory.Clients
                     {
                         try
                         {
-                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData), cts.Token).GetAwaiter().GetResult() ?? new List<Achievement>();
+                            AllAchievements = Task.Run(async () => await GetXboxAchievements(game, authData).ConfigureAwait(false), cts.Token).GetAwaiter().GetResult() ?? new List<Achievement>();
                         }
                         catch (Exception ex) when (ex is OperationCanceledException || ex is TaskCanceledException)
                         {
@@ -211,7 +211,7 @@ namespace SuccessStory.Clients
                     {
                         try
                         {
-                            CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync()).GetAwaiter().GetResult();
+                            CachedIsConnectedResult = Task.Run(async () => await IsConnectedAsync().ConfigureAwait(false)).GetAwaiter().GetResult();
                         }
                         catch (ObjectDisposedException)
                         {
@@ -244,7 +244,7 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    await _isConnectedSemaphore.WaitAsync();
+                    await _isConnectedSemaphore.WaitAsync().ConfigureAwait(false);
                 }
                 catch (ObjectDisposedException)
                 {
@@ -257,11 +257,11 @@ namespace SuccessStory.Clients
                     // Double-check after acquiring lock
                     if (CachedIsConnectedResult == null)
                     {
-                        bool isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
+                        bool isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn().ConfigureAwait(false);
                         if (!isAuthenticated && File.Exists(XboxAccountClient.liveTokensPath))
                         {
-                            await XboxAccountClient.RefreshTokens();
-                            isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn();
+                            await XboxAccountClient.RefreshTokens().ConfigureAwait(false);
+                            isAuthenticated = await XboxAccountClient.GetIsUserLoggedIn().ConfigureAwait(false);
                         }
 
                         if (!isAuthenticated)
@@ -323,7 +323,7 @@ namespace SuccessStory.Clients
                         return cachedTitleId;
                     }
 
-                    var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId);
+                    var titleInfo = await XboxAccountClient.GetTitleInfo(game.GameId).ConfigureAwait(false);
                     if (titleInfo != null && !string.IsNullOrEmpty(titleInfo.titleId))
                     {
                         // Thread-safe cache size check and clear
@@ -366,7 +366,7 @@ namespace SuccessStory.Clients
                 request.Headers.Add("User-Agent", Web.UserAgent);
                 SetAuthenticationHeaders(request.Headers, authData, contractVersion);
 
-                using (HttpResponseMessage response = await _sharedHttpClient.SendAsync(request))
+                using (HttpResponseMessage response = await _sharedHttpClient.SendAsync(request).ConfigureAwait(false))
                 {
                 if (response.StatusCode != System.Net.HttpStatusCode.OK)
                 {
@@ -392,7 +392,7 @@ namespace SuccessStory.Clients
                     return null;
                 }
 
-                string cont = await response.Content.ReadAsStringAsync();
+                string cont = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
                 Common.LogDebug(true, cont);
 
                 return Serialization.FromJson<TContent>(cont);
@@ -424,7 +424,7 @@ namespace SuccessStory.Clients
             {
                 try
                 {
-                    List<Achievement> result = await getAchievementsMethod.Invoke(game, authorizationData);
+                    List<Achievement> result = await getAchievementsMethod.Invoke(game, authorizationData).ConfigureAwait(false);
                     if (result != null && result.Any())
                     {
                         return result;
@@ -463,7 +463,7 @@ namespace SuccessStory.Clients
 
             Common.LogDebug(true, $"GetXboxAchievements() - name: {game.Name} - gameId: {game.GameId}");
             
-            string titleId = await GetTitleIdAsync(game);
+            string titleId = await GetTitleIdAsync(game).ConfigureAwait(false);
 
             string url = string.Format(AchievementsBaseUrl, xuid) + $"?titleId={titleId}&maxItems=1000";
             if (titleId.IsNullOrEmpty())
@@ -472,7 +472,7 @@ namespace SuccessStory.Clients
                 Logger.Warn($"{ClientName} - Bad request");
             }
 
-            XboxOneAchievementResponse response = await GetSerializedContentFromUrl<XboxOneAchievementResponse>(url, authorizationData, "2");
+            XboxOneAchievementResponse response = await GetSerializedContentFromUrl<XboxOneAchievementResponse>(url, authorizationData, "2").ConfigureAwait(false);
 
             List<XboxOneAchievement> relevantAchievements;
             if (titleId.IsNullOrEmpty())
@@ -507,7 +507,7 @@ namespace SuccessStory.Clients
 
             Common.LogDebug(true, $"GetXbox360Achievements() - name: {game.Name} - gameId: {game.GameId}");
 
-            string titleId = await GetTitleIdAsync(game);
+            string titleId = await GetTitleIdAsync(game).ConfigureAwait(false);
 
             if (titleId.IsNullOrEmpty())
             {
@@ -523,7 +523,7 @@ namespace SuccessStory.Clients
             string allAchievementsUrl = string.Format(TitleAchievementsBaseUrl, xuid) + $"?titleId={titleId}&maxItems=1000";
             Task<Xbox360AchievementResponse> getAllAchievementsTask = GetSerializedContentFromUrl<Xbox360AchievementResponse>(allAchievementsUrl, authorizationData, "1");
 
-            await Task.WhenAll(getUnlockedAchievementsTask, getAllAchievementsTask);
+            await Task.WhenAll(getUnlockedAchievementsTask, getAllAchievementsTask).ConfigureAwait(false);
 
             Dictionary<int, Xbox360Achievement> mergedAchievements = getUnlockedAchievementsTask.Result.achievements.ToDictionary(x => x.id);
             foreach (Xbox360Achievement a in getAllAchievementsTask.Result.achievements)

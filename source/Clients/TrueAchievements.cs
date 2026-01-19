@@ -7,7 +7,7 @@ using Playnite.SDK;
 using Playnite.SDK.Models;
 using SuccessStory.Services;
 using System;
-using System.Diagnostics;
+
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -440,9 +440,8 @@ namespace SuccessStory.Clients
                         if (!string.IsNullOrEmpty(imgUrl))
                         {
                             images.Add(key, imgUrl);
+                            index++;
                         }
-
-                        index++;
                     }
                     catch (Exception exImg)
                     {

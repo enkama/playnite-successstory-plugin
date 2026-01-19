@@ -53,7 +53,7 @@ namespace SuccessStory.Services
             };
         });
 
-        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => new Dictionary<AchievementSource, GenericAchievements>(achievementProviders.Value);
+        public static Dictionary<AchievementSource, GenericAchievements> AchievementProviders => achievementProviders.Value;
 
         public SuccessStoryDatabase(SuccessStorySettingsViewModel pluginSettings, string pluginUserDataPath) : base(pluginSettings, "SuccessStory", pluginUserDataPath)
         {
@@ -388,6 +388,7 @@ namespace SuccessStory.Services
                     using (var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
                     {
                         cts.CancelAfter(TimeSpan.FromSeconds(10));
+                        var token = cts.Token;
 
                         var searchTask = Task.Run(async () =>
                         {
@@ -413,7 +414,7 @@ namespace SuccessStory.Services
 
                                 foreach (var origin in searches)
                                 {
-                                    if (cts.Token.IsCancellationRequested)
+                                    if (token.IsCancellationRequested)
                                     {
                                         Logger.Debug($"SetEstimateTimeToUnlock cancelled for {game.Name}");
                                         break;
@@ -478,16 +479,20 @@ namespace SuccessStory.Services
 
 
 
-                        var completedTask = await Task.WhenAny(searchTask, Task.Delay(TimeSpan.FromSeconds(10)));
-                        if (completedTask == searchTask)
+                        try
                         {
                             await searchTask.ConfigureAwait(false);
                         }
-                        else
+                        catch (Exception ex)
                         {
-                            Logger.Warn($"SetEstimateTimeToUnlockAsync timed out for {game.Name}");
-                            // Attempt to cancel the running task
-                            try { cts.Cancel(); } catch { }
+                            if (ex is OperationCanceledException)
+                            {
+                                Logger.Debug($"SetEstimateTimeToUnlockAsync timed out or cancelled for {game.Name}");
+                            }
+                            else
+                            {
+                                Logger.Error(ex, $"Error waiting for search task for {game.Name}");
+                            }
                         }
 
                         if (estimateTimeSteam != null && estimateTimeXbox != null && estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
