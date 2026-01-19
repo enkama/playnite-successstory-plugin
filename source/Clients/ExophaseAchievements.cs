@@ -476,7 +476,9 @@ namespace SuccessStory.Clients
         {
             if (SynchronizationContext.Current != null)
             {
-                Logger.Warn("GetIsUserLoggedIn called from UI thread, potential deadlock.");
+                throw new InvalidOperationException(
+                    "GetIsUserLoggedIn must be called from a background thread. " +
+                    "Use Task.Run() to avoid deadlocks.");
             }
 
             var data = Web.DownloadSourceDataWebView(UrlExophaseAccount, GetCookies(), true, CookiesDomains).GetAwaiter().GetResult();

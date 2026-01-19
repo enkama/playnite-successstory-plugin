@@ -505,12 +505,12 @@ namespace SuccessStory.Services
                             }
                         }
 
-                        if (estimateTimeSteam != null && estimateTimeXbox != null && estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
+                        if (estimateTimeSteam.DataCount >= estimateTimeXbox.DataCount && estimateTimeSteam.DataCount > 0)
                         {
                             Common.LogDebug(true, $"Using EstimateTime (Steam) for {game.Name}");
                             gameAchievements.EstimateTime = estimateTimeSteam;
                         }
-                        else if (estimateTimeXbox != null && estimateTimeXbox.DataCount > 0)
+                        else if (estimateTimeXbox.DataCount > 0)
                         {
                             Common.LogDebug(true, $"Using EstimateTime (Xbox) for {game.Name}");
                             gameAchievements.EstimateTime = estimateTimeXbox;
@@ -975,7 +975,7 @@ namespace SuccessStory.Services
                 {
                     if (webItem.HasAchievements)
                     {
-                        webItem = SetEstimateTimeToUnlockAsync(game, webItem, cancellationToken).GetAwaiter().GetResult();
+                        webItem = SetEstimateTimeToUnlock(game, webItem, cancellationToken);
                     }
                     Update(webItem);
                 }

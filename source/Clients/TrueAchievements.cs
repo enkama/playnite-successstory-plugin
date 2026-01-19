@@ -363,6 +363,8 @@ namespace SuccessStory.Clients
                 {
                     // Cap processed images to avoid performance issues on huge pages
                     processedCount++;
+                    // Limit processed images to prevent checking too many elements on large pages.
+                    // The multiplier (* 4) estimates that about 1 in 4 images might be valid/relevant, allowing for some filtering overhead.
                     if (index >= MaxImagesPerPage || processedCount >= MaxImagesPerPage * 4) break;
 
                     try
@@ -379,12 +381,29 @@ namespace SuccessStory.Clients
                         else if (imgUrl.StartsWith("/"))
                         {
                             if (baseUri != null)
+                            {
                                 imgUrl = baseUri.GetLeftPart(UriPartial.Authority) + imgUrl;
+                            }
+                            else
+                            {
+                                // Cannot resolve root-relative URL without baseUri
+                                Logger.Warn($"GetDataImages: Skipping root-relative URL '{imgUrl}' because baseUri is null.");
+                                continue;
+                            }
                         }
-                        else if (!imgUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) && baseUri != null)
+                        else if (!imgUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                         {
-                            // relative path
-                            imgUrl = new Uri(baseUri, imgUrl).ToString();
+                            if (baseUri != null)
+                            {
+                                // relative path
+                                imgUrl = new Uri(baseUri, imgUrl).ToString();
+                            }
+                            else
+                            {
+                                // Cannot resolve relative URL without baseUri
+                                Logger.Warn($"GetDataImages: Skipping relative URL '{imgUrl}' because baseUri is null.");
+                                continue;
+                            }
                         }
 
                         // De-duplicate by URL
